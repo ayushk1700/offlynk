@@ -191,7 +191,7 @@ export function EmailAuth({ onComplete }: Props) {
       const privateKey = await exportPrivateKey(keyPair.privateKey);
 
       const uid    = pendingUid || useAuthStore.getState().uid || generateId();
-      const did    = `did:offgrid:${uid}`;
+      const did    = `did:offlynk:${uid}`;
 
       setCurrentUser({ id: uid, name: displayName.trim(), publicKey });
       setKeys({ publicKey, privateKey });
@@ -310,7 +310,7 @@ export function EmailAuth({ onComplete }: Props) {
                   <Sparkles className="w-3 h-3 text-primary/70" />
                 </motion.div>
               </div>
-              <h1 className="text-2xl font-bold tracking-tight mb-1">Off-Grid Chat</h1>
+              <h1 className="text-2xl font-bold tracking-tight mb-1">OffLynk</h1>
               <p className="text-sm text-muted-foreground">Private. Encrypted. Yours.</p>
             </div>
 

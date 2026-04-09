@@ -1,2 +1,2 @@
-# offgrid-chat
+# OffLynk
 go outoff grid

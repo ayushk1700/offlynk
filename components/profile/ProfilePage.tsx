@@ -29,7 +29,7 @@ export function ProfilePage({ onBack }: Props) {
   const { currentUser } = useUserStore();
 
   const [name, setName] = useState(profile?.displayName || currentUser?.name || "");
-  const [about, setAbout] = useState(profile?.about || "Hey there! I'm using Off-Grid Chat.");
+  const [about, setAbout] = useState(profile?.about || "Hey there! I'm using OffLynk.");
   const [status, setStatus] = useState(profile?.status || "🟢 Available");
   const [photoURL, setPhotoURL] = useState(profile?.photoURL || "");
 
@@ -342,7 +342,7 @@ export function ProfilePage({ onBack }: Props) {
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground mb-1">Decentralized Identity (DID)</p>
                 <p className="text-xs font-mono text-foreground truncate select-all bg-muted/30 px-2 py-1 rounded">
-                  {currentUser?.id ? `did:offgrid:${currentUser.id}` : "—"}
+                  {currentUser?.id ? `did:offlynk:${currentUser.id}` : "—"}
                 </p>
               </div>
             </div>

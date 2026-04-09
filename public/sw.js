@@ -1,7 +1,7 @@
-// Off-Grid Chat Service Worker — v1
+// OffLynk Service Worker — v1
 // Offline-first with Network-falling-back-to-cache strategy
 
-const CACHE_NAME = "offgrid-v1";
+const CACHE_NAME = "offlynk-v1";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",

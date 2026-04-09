@@ -24,10 +24,10 @@ interface UserState {
  * simulate a second device on the same Wi-Fi.
  */
 function getStorageKey() {
-  if (typeof window === 'undefined') return 'offgrid-user-storage';
+  if (typeof window === 'undefined') return 'offlynk-user-storage';
   const params = new URLSearchParams(window.location.search);
   const node = params.get('node') ?? '1';
-  return node === '1' ? 'offgrid-user-storage' : `offgrid-user-storage-node-${node}`;
+  return node === '1' ? 'offlynk-user-storage' : `offlynk-user-storage-node-${node}`;
 }
 
 function getStorage() {

@@ -27,7 +27,7 @@ export function FeedbackForm({ onBack }: Props) {
       setSent(true);
     } catch {
       // Fallback: open mailto
-      const subject = encodeURIComponent(`[Off-Grid Chat] ${category}`);
+      const subject = encodeURIComponent(`[OffLynk] ${category}`);
       const body = encodeURIComponent(`${message}\n\n---\nUser: ${uid || "anonymous"}`);
       window.open(`mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`);
       setSent(true);
@@ -49,7 +49,7 @@ export function FeedbackForm({ onBack }: Props) {
           <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
             <CheckCircle2 className="w-16 h-16 text-primary" />
             <h3 className="font-bold text-xl">Thank you!</h3>
-            <p className="text-muted-foreground text-sm">Your feedback has been sent. It helps make Off-Grid Chat better.</p>
+            <p className="text-muted-foreground text-sm">Your feedback has been sent. It helps make OffLynk better.</p>
             <Button onClick={onBack} variant="outline">Back to Settings</Button>
           </div>
         ) : (

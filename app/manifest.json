@@ -1,6 +1,6 @@
 {
-  "name": "Off-Grid Chat",
-  "short_name": "OffGrid",
+  "name": "OffLynk",
+  "short_name": "OffLynk",
   "description": "Decentralized, offline-capable E2E encrypted chat",
   "start_url": "/",
   "display": "standalone",

@@ -70,7 +70,7 @@ export default function MessageInput() {
       id, senderId: currentUser.id, receiverId: activeChatId, content: "🎙 Voice message",
       timestamp: ts, status: "sent", type: "voice",
       fileData: { name: "voice.webm", mimeType: data.mimeType, blobUrl: data.blobUrl, duration: data.duration },
-      did: `did:offgrid:${currentUser.id}`,
+      did: `did:offlynk:${currentUser.id}`,
     });
 
     useChatStore.getState().updateMessageStatus(id, "sent");
@@ -86,7 +86,7 @@ export default function MessageInput() {
       id, senderId: currentUser.id, receiverId: activeChatId, content: "🎥 Video message",
       timestamp: ts, status: "sent", type: "file",
       fileData: { name: "video.webm", mimeType: data.mimeType, blobUrl: data.blobUrl, duration: data.duration, size: data.size },
-      did: `did:offgrid:${currentUser.id}`,
+      did: `did:offlynk:${currentUser.id}`,
     });
 
     useChatStore.getState().updateMessageStatus(id, "sent");
@@ -109,7 +109,7 @@ export default function MessageInput() {
       id, senderId: currentUser.id, receiverId: activeChatId, content: "📷 Photo",
       timestamp: ts, status: "sending", type: "image",
       fileData: newFileData,
-      did: `did:offgrid:${currentUser.id}`,
+      did: `did:offlynk:${currentUser.id}`,
     });
 
     // Send encrypted over WebRTC

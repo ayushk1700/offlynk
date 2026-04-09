@@ -104,11 +104,11 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
       await navigator.credentials.create({
         publicKey: {
           challenge: challenge,
-          rp: { name: "Off-Grid Chat", id: window.location.hostname },
+          rp: { name: "OffLynk", id: window.location.hostname },
           user: {
             id: userId,
-            name: email || "user@offgrid",
-            displayName: email || "Off-Grid User"
+            name: email || "user@offlynk",
+            displayName: email || "OffLynk User"
           },
           pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
           authenticatorSelection: { userVerification: "preferred" },
@@ -329,7 +329,7 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
             <LogOut className="w-4 h-4" /> Sign Out
           </Button>
           <p className="text-center text-xs text-muted-foreground mt-3 opacity-50">
-            Off-Grid Chat v1.0 · No servers · Open source
+            OffLynk v1.0 · No servers · Open source
           </p>
         </div>
       </div>

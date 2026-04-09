@@ -59,7 +59,7 @@ export default function HomePage() {
       <div className="min-h-[100dvh] flex items-center justify-center bg-background paper-texture">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-          <p className="text-sm text-muted-foreground">Loading Off-Grid Chat…</p>
+          <p className="text-sm text-muted-foreground">Loading OffLynk…</p>
         </div>
       </div>
     );

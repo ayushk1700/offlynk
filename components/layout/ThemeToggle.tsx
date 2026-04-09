@@ -29,7 +29,7 @@ export function ThemeProvider({
 
   useEffect(() => {
     setMounted(true);
-    const savedTheme = localStorage.getItem("offgrid-theme") as Theme;
+    const savedTheme = localStorage.getItem("offlynk-theme") as Theme;
     if (savedTheme) {
       setThemeState(savedTheme);
     }
@@ -37,7 +37,7 @@ export function ThemeProvider({
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem("offgrid-theme", newTheme);
+    localStorage.setItem("offlynk-theme", newTheme);
   };
 
   useEffect(() => {

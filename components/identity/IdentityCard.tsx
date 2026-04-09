@@ -71,7 +71,7 @@ export default function IdentityCard() {
         {/* Title */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-foreground mb-2">
-            Off-Grid Chat
+            OffLynk
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
             Decentralized · Encrypted · No servers

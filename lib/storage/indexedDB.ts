@@ -4,10 +4,10 @@
  */
 import { openDB, DBSchema, IDBPDatabase } from "idb";
 
-const DB_NAME = "offgrid-chat-db";
+const DB_NAME = "offlynk-db";
 const DB_VERSION = 1;
 
-interface OffgridDB extends DBSchema {
+interface OfflynkDB extends DBSchema {
   messages: {
     key: string;
     value: {
@@ -39,11 +39,11 @@ interface OffgridDB extends DBSchema {
   };
 }
 
-let dbPromise: Promise<IDBPDatabase<OffgridDB>> | null = null;
+let dbPromise: Promise<IDBPDatabase<OfflynkDB>> | null = null;
 
-export function getDB(): Promise<IDBPDatabase<OffgridDB>> {
+export function getDB(): Promise<IDBPDatabase<OfflynkDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<OffgridDB>(DB_NAME, DB_VERSION, {
+    dbPromise = openDB<OfflynkDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
         if (!db.objectStoreNames.contains("messages")) {
           const msgStore = db.createObjectStore("messages", { keyPath: "id" });

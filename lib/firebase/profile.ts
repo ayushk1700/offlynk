@@ -26,7 +26,7 @@ export interface UserProfile {
 export const DEFAULT_PROFILE: Partial<UserProfile> = {
   displayName: "",
   photoURL: "",
-  about: "Hey there! I'm using Off-Grid Chat.",
+  about: "Hey there! I'm using OffLynk.",
   status: "🟢 Available",
   privacyLastSeen: "everyone",
   privacyReadReceipts: true,

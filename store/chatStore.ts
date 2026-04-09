@@ -21,7 +21,7 @@ export interface Message {
   };
   deletedForEveryone?: boolean;
   deletedLocally?: boolean;
-  /** DID of sender: did:offgrid:{userId} */
+  /** DID of sender: did:offlynk:{userId} */
   did?: string;
 }
 
@@ -96,7 +96,7 @@ export const useChatStore = create<ChatState>()(
               isOnline: true,
               unreadCount: isActiveChat || msg.senderId === myId ? 0 : 1,
               lastSeen: msg.timestamp,
-              did: `did:offgrid:${chatKey}`
+              did: `did:offlynk:${chatKey}`
             };
           }
 
@@ -126,7 +126,7 @@ export const useChatStore = create<ChatState>()(
                   ...state.peers[existingPeerId],
                   ...peer, // Pull in new network state (like isOnline)
                   id: existingPeerId, // Force the ID to stay the same so chat history links up!
-                  did: peer.did || state.peers[existingPeerId].did || `did:offgrid:${existingPeerId}`,
+                  did: peer.did || state.peers[existingPeerId].did || `did:offlynk:${existingPeerId}`,
                   unreadCount: state.peers[existingPeerId].unreadCount || 0,
                   lastSeen: peer.isOnline ? Date.now() : (state.peers[existingPeerId].lastSeen || Date.now()),
                 },
@@ -140,7 +140,7 @@ export const useChatStore = create<ChatState>()(
               ...state.peers,
               [peer.id]: {
                 ...peer,
-                did: peer.did || `did:offgrid:${peer.id}`,
+                did: peer.did || `did:offlynk:${peer.id}`,
                 unreadCount: 0,
                 lastSeen: Date.now(),
               },
@@ -190,6 +190,6 @@ export const useChatStore = create<ChatState>()(
           ),
         })),
     }),
-    { name: 'offgrid-messages-v3' }
+    { name: 'offlynk-messages-v3' }
   )
 );

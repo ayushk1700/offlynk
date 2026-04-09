@@ -12,7 +12,7 @@
  */
 import type { User } from "@/store/userStore";
 
-export const CHANNEL_NAME = "offgrid-local";
+export const CHANNEL_NAME = "offlynk-local";
 
 export type BCMessageType =
   | "announce"

@@ -7,7 +7,7 @@
  *
  * The passphrase mode works by:
  * 1. Hash the passphrase with SHA-256 → 8-char hex
- * 2. Create a BroadcastChannel named "offgrid-pass-{hash}"
+ * 2. Create a BroadcastChannel named "offlynk-pass-{hash}"
  * 3. Two users with the same passphrase discover each other instantly
  */
 import { useState, useEffect, useRef } from "react";
@@ -69,7 +69,7 @@ export function ConnectFlow() {
     setPassphraseStatus("waiting");
 
     const hash = await hashPassphrase(passphrase);
-    const chanName = `offgrid-pass-${hash}`;
+    const chanName = `offlynk-pass-${hash}`;
     const ch = new BroadcastChannel(chanName);
     passChanRef.current = ch;
 

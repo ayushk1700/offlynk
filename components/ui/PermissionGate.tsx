@@ -89,7 +89,7 @@ export function PermissionGate({ onDone }: { onDone: () => void }) {
           </div>
           <h1 className="text-xl font-bold mb-1">Permissions</h1>
           <p className="text-sm text-muted-foreground">
-            Off-Grid Chat needs a couple of permissions to work at its best.
+            OffLynk needs a couple of permissions to work at its best.
           </p>
         </div>
 

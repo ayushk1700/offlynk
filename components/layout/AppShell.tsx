@@ -93,7 +93,7 @@ export function AppShell() {
                 <Radio className="w-9 h-9 text-muted-foreground opacity-40" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-foreground mb-2">Off-Grid Chat</h2>
+                <h2 className="text-xl font-semibold text-foreground mb-2">OffLynk</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   Open another tab at <code className="text-xs bg-muted/60 px-1.5 py-0.5 rounded">?node=2</code> to auto-connect.
                 </p>

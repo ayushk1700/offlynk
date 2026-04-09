@@ -10,14 +10,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Off-Grid Chat",
+  title: "OffLynk",
   description:
     "Decentralized, offline-capable E2E encrypted chat — no servers, no accounts.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Off-Grid Chat",
+    title: "OffLynk",
   },
 };
 

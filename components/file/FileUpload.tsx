@@ -45,7 +45,7 @@ export function FileUpload({ onClose }: Props) {
       status: "sending",
       type: "file",
       fileData,
-      did: `did:offgrid:${currentUser.id}`,
+      did: `did:offlynk:${currentUser.id}`,
     });
 
     const peer = peersInstance[activeChatId];

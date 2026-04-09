@@ -68,7 +68,7 @@ export const useFeatureStore = create<FeatureState>()(
       setLocation: (loc) => set({ location: loc }),
       setLocationEnabled: (v) => set({ locationEnabled: v }),
     }),
-    { name: 'offgrid-features-v1' }
+    { name: 'offlynk-features-v1' }
   )
 );
 

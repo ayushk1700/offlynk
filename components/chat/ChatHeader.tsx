@@ -145,7 +145,7 @@ export default function ChatHeader({ onSOSClick }: Props) {
   const isPinned = pinnedChats.includes(peer.id);
   const isSilent = silentChats.includes(peer.id);
   const sdMins = selfDestructChats[peer.id] ?? 0;
-  const peerDid = peer.did || `did:offgrid:${peer.id}`;
+  const peerDid = peer.did || `did:offlynk:${peer.id}`;
 
   return (
     <div className="relative">

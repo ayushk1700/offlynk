@@ -49,6 +49,6 @@ export const useAuthStore = create<AuthState>()(
       signOut: () => set({ uid: null, phone: null, email: null, profile: null, isAuthenticated: false, isLoading: false }),
       updatePrivacy: (key, value) => set({ [key]: value } as Partial<AuthState>),
     }),
-    { name: "offgrid-auth-v1" }
+    { name: "offlynk-auth-v1" }
   )
 );
