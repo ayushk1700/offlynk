@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import { useUserStore } from "@/store/userStore";
-import { getProfile, updateProfile, uploadProfilePhoto } from "@/lib/firebase/profile";
+import { getProfile, updateProfile, uploadProfilePhoto, UserProfile } from "@/lib/firebase/profile";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 const STATUS_OPTIONS = [
   "🟢 Available",
@@ -47,6 +48,16 @@ export function ProfilePage({ onBack }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
+  // Keep local state in sync when profile hydrates/updates
+  useEffect(() => {
+    if (profile) {
+      if (!editingName) setName(profile.displayName || "");
+      if (!editingAbout) setAbout(profile.about || "");
+      setStatus(profile.status || "🟢 Available");
+      setPhotoURL(profile.photoURL || "");
+    }
+  }, [profile, editingName, editingAbout]);
+
   useEffect(() => {
     if (uid) {
       getProfile(uid).then((p) => {
@@ -61,9 +72,9 @@ export function ProfilePage({ onBack }: Props) {
     }
   }, [uid]);
 
-  const saveField = async (field: string, value: string) => {
+  const saveField = async (field: keyof UserProfile, value: string) => {
     if (uid) await updateProfile(uid, { [field]: value });
-    setProfile({ ...profile, [field]: value });
+    setProfile({ ...profile || {}, [field]: value } as Partial<UserProfile>);
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,9 +95,9 @@ export function ProfilePage({ onBack }: Props) {
   const handleChangeEmail = async () => {
     if (!newEmail.includes("@")) return;
     try {
-      const { getAuth, updateEmail: fbUpdateEmail } = await import("firebase/auth");
-      const auth = getAuth();
-      if (auth.currentUser) {
+      const auth = await getFirebaseAuth();
+      if (auth?.currentUser) {
+        const { updateEmail: fbUpdateEmail } = await import("firebase/auth");
         await fbUpdateEmail(auth.currentUser, newEmail);
         await saveField("email", newEmail);
         setAuth(uid!, phone, newEmail);
@@ -103,9 +114,7 @@ export function ProfilePage({ onBack }: Props) {
     setPasskeyLoading(true);
     setSystemMessage("");
     try {
-      if (window.PublicKeyCredential) {
-        const { getAuth } = await import("firebase/auth");
-        const auth = getAuth();
+      if (typeof window !== "undefined" && window.PublicKeyCredential) {
         setSystemMessage("Prompting device for Passkey...");
         setTimeout(() => {
           setSystemMessage("Passkey registered to this device securely!");
@@ -124,8 +133,11 @@ export function ProfilePage({ onBack }: Props) {
   // NEW: Firebase Sign Out while maintaining Local Storage
   const handleSignOut = async () => {
     try {
-      const { getAuth, signOut: fbSignOut } = await import("firebase/auth");
-      await fbSignOut(getAuth());
+      const auth = await getFirebaseAuth();
+      if (auth) {
+        const { signOut: fbSignOut } = await import("firebase/auth");
+        await fbSignOut(auth);
+      }
     } catch (err) {
       console.error("Sign out error", err);
     }
@@ -296,8 +308,8 @@ export function ProfilePage({ onBack }: Props) {
                       key={s}
                       onClick={() => { setStatus(s); saveField("status", s); }}
                       className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${status === s
-                          ? "border-primary/50 bg-primary/10 text-foreground"
-                          : "border-border text-muted-foreground hover:bg-muted/40"
+                        ? "border-primary/50 bg-primary/10 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted/40"
                         }`}
                     >
                       {s}
