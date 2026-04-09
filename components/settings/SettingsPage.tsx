@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import { useFeatureStore } from "@/store/featureStore";
 import { useTheme } from "@/components/layout/ThemeToggle";
+import { useUserStore } from "@/store/userStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { FeedbackForm } from "./FeedbackForm";
 import { PrivacySettings } from "./PrivacySettings";
@@ -50,6 +51,7 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
       const { getAuth, signOut: fbSignOut } = await import("firebase/auth");
       await fbSignOut(getAuth());
     } catch { /* offline – silent */ }
+    useUserStore.getState().clearUser();
     signOut();
   };
 
@@ -92,7 +94,28 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
         return;
       }
       setPasskeyMsg("Prompting your device for a passkey…");
-      await new Promise((r) => setTimeout(r, 2000));
+      
+      const challenge = new Uint8Array(32);
+      crypto.getRandomValues(challenge);
+      
+      const userId = new Uint8Array(16);
+      crypto.getRandomValues(userId);
+
+      await navigator.credentials.create({
+        publicKey: {
+          challenge: challenge,
+          rp: { name: "Off-Grid Chat", id: window.location.hostname },
+          user: {
+            id: userId,
+            name: email || "user@offgrid",
+            displayName: email || "Off-Grid User"
+          },
+          pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
+          authenticatorSelection: { userVerification: "preferred" },
+          timeout: 60000,
+        }
+      });
+
       setPasskeyMsg("✓ Passkey registered to this device securely!");
     } catch (e: any) {
       setPasskeyMsg("Failed: " + (e?.message ?? "unknown error"));

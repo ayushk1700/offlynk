@@ -50,7 +50,7 @@ export function EmergencyModal({ open, onClose }: Props) {
 
     // WebRTC peers
     Object.values(peersInstance).forEach((p) => {
-      try { p.send(JSON.stringify({ ...msg, type: "message" })); } catch {}
+      try { p.send(JSON.stringify({ ...msg, type: "message" })); } catch (err) { console.error("RTC send error:", err); }
     });
 
     setSent(true);

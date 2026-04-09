@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useChatStore, useUserStore } from "@/store";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
-import { Send, ShieldAlert, X, Paperclip } from "lucide-react";
+import { Send, ShieldAlert, X, Paperclip, Plus } from "lucide-react";
 import { generateId } from "@/lib/utils/helpers";
 import { peersInstance } from "@/components/connection/PeerDiscovery";
 import { sendLocalMessage, sendTypingSignal, sendAmbientTyping } from "@/lib/webrtc/broadcastChannel";
@@ -49,9 +49,9 @@ export default function MessageInput() {
     // Send via BroadcastChannel (tabs) + WebRTC (remote)
     sendLocalMessage({ id, senderId: currentUser.id, senderName: currentUser.name, receiverId: activeChatId, content, timestamp: ts });
     const rtcPeer = peersInstance[activeChatId];
-    if (rtcPeer) { try { rtcPeer.send(JSON.stringify({ ...msgData, type: "message" })); } catch { } }
+    if (rtcPeer) { try { rtcPeer.send(JSON.stringify({ ...msgData, type: "message" })); } catch (err) { console.error("RTC send error:", err); } }
     else if (activeChatId === "broadcast") {
-      Object.values(peersInstance).forEach((p) => { try { p.send(JSON.stringify({ ...msgData, type: "message" })); } catch { } });
+      Object.values(peersInstance).forEach((p) => { try { p.send(JSON.stringify({ ...msgData, type: "message" })); } catch (err) { console.error("RTC send error:", err); } });
     }
 
     useChatStore.getState().updateMessageStatus(id, "sent");
@@ -119,7 +119,7 @@ export default function MessageInput() {
       const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
       outgoingTransfers.set(transferId, { name: "photo.jpg", size: blob.size, progress: 0 });
       sendFile(file, transferId, currentUser.id, (data) => {
-        try { peer.send(data); } catch { }
+        try { peer.send(data); } catch (err) { console.error("RTC send error:", err); }
       }, (pct) => {
         outgoingTransfers.set(transferId, { name: "photo.jpg", size: blob.size, progress: pct });
       }).then(() => {
@@ -171,34 +171,36 @@ export default function MessageInput() {
   const hasText = text.trim().length > 0;
 
   return (
-    <div className="shrink-0 border-t border-border bg-card/92 backdrop-blur-md relative">
+    <div className="shrink-0 border-t border-border bg-card/80 backdrop-blur-xl relative pb-[env(safe-area-inset-bottom,0px)]">
       {/* File upload panel */}
       {showFileUpload && (
-        <div className="border-b border-border/50 bg-card">
+        <div className="border-b border-border/50 bg-card overflow-hidden">
           <FileUpload onClose={() => setShowFileUpload(false)} />
         </div>
       )}
 
-      <form onSubmit={handleSend} className="flex gap-1.5 items-end px-2 py-2">
-        {/* LEFT: Emoji + Attach + Camera */}
-        <EmojiPicker onSelect={insertEmoji} />
-
+      <form onSubmit={handleSend} className="flex gap-2 items-end px-3 py-2.5 mx-auto max-w-4xl">
+        {/* LEFT: Attach / + */}
         <button
           type="button"
           onClick={() => setShowFileUpload((v) => !v)}
-          className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${showFileUpload
-            ? "text-primary bg-primary/10"
-            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            }`}
+          className={`shrink-0 w-9 h-9 mb-[3px] flex items-center justify-center rounded-full transition-transform duration-300 ${
+            showFileUpload
+              ? "bg-primary text-primary-foreground rotate-45 shadow-sm"
+              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          }`}
           title="Attach file"
         >
-          {showFileUpload ? <X className="w-5 h-5" /> : <Paperclip className="w-5 h-5" />}
+          <Plus className="w-5 h-5" />
         </button>
 
-        {!hasText && !isBroadcast && <CameraCapture onCapture={handleCameraCapture} />}
+        {/* CENTER: The Pill Input */}
+        <div className="flex-1 flex items-end min-w-0 bg-muted/40 border border-border/60 rounded-[20px] pb-[3px] focus-within:ring-1 focus-within:ring-primary/30 focus-within:border-primary/40 transition-all shadow-sm">
+          {/* Emoji Picker (Inside Left) */}
+          <div className="shrink-0 mb-0.5 ml-1">
+             <EmojiPicker onSelect={insertEmoji} />
+          </div>
 
-        {/* CENTER: Textarea */}
-        <div className="flex-1 min-w-0">
           <textarea
             ref={textareaRef}
             value={text}
@@ -206,30 +208,44 @@ export default function MessageInput() {
             onKeyDown={handleKeyDown}
             placeholder={isBroadcast ? "Emergency broadcast…" : "Message"}
             rows={1}
-            className="w-full resize-none bg-muted/50 border border-border/40 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring/30 text-foreground placeholder:text-muted-foreground max-h-36 overflow-y-auto leading-relaxed transition-all"
+            className="flex-1 max-h-36 overflow-y-auto bg-transparent px-2 py-[9px] text-[15px] resize-none focus:outline-none placeholder:text-muted-foreground/60 leading-relaxed text-foreground"
             style={{ height: "auto" }}
           />
+
+          {/* Camera (Inside Right, only if empty) */}
+          {!hasText && !isBroadcast && (
+            <div className="shrink-0 mb-0.5 mr-1 overflow-hidden">
+               <CameraCapture onCapture={handleCameraCapture} />
+            </div>
+          )}
         </div>
 
-        {/* RIGHT: Voice + Video (no text) OR Send (has text) */}
-        {!hasText && !isBroadcast ? (
-          <div className="flex items-center gap-1">
-            <VideoRecorder onSend={handleVideoSend} />
-            <VoiceRecorder onSend={handleVoiceSend} />
-          </div>
-        ) : (
-          <Button
-            type="submit"
-            size="icon"
-            disabled={!text.trim() && !isBroadcast}
-            className={`shrink-0 h-10 w-10 rounded-2xl transition-all ${isBroadcast
-              ? "bg-destructive hover:bg-destructive/80 text-destructive-foreground"
-              : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20"
+        {/* RIGHT: Voice/Video circles OR Send Circle */}
+        <div className="shrink-0 flex items-center gap-1.5 mb-[3px]">
+          {!hasText && !isBroadcast ? (
+            <>
+              <VideoRecorder onSend={handleVideoSend} />
+              <VoiceRecorder onSend={handleVoiceSend} />
+            </>
+          ) : (
+            <Button
+              type="submit"
+              size="icon"
+              disabled={!text.trim() && !isBroadcast}
+              className={`w-9 h-9 rounded-full transition-all shadow-md ${
+                isBroadcast
+                  ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  : "bg-primary hover:bg-primary/90 text-primary-foreground"
               }`}
-          >
-            {isBroadcast ? <ShieldAlert className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-          </Button>
-        )}
+            >
+              {isBroadcast ? (
+                <ShieldAlert className="w-[18px] h-[18px]" />
+              ) : (
+                <Send className="w-[18px] h-[18px] ml-0.5" />
+              )}
+            </Button>
+          )}
+        </div>
       </form>
     </div>
   );

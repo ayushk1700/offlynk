@@ -62,7 +62,7 @@ export function EmergencyPanel({ open, onClose }: Props) {
 
     // Send via WebRTC to all connected peers
     const packet = JSON.stringify({ type: "message", id, senderId: currentUser.id, receiverId: "broadcast", content, timestamp: ts });
-    Object.values(peersInstance).forEach((p) => { try { p.send(packet); } catch {} });
+    Object.values(peersInstance).forEach((p) => { try { p.send(packet); } catch (err) { console.error("RTC send error:", err); } });
 
     setSentMsg(content);
     setSent(true);

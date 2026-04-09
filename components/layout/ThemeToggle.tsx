@@ -24,25 +24,36 @@ export function ThemeProvider({
   enableSystem = true,
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
+  const [theme, setThemeState] = useState<Theme>(defaultTheme);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem("offgrid-theme") as Theme;
+    if (savedTheme) {
+      setThemeState(savedTheme);
+    }
+  }, []);
+
+  const setTheme = (newTheme: Theme) => {
+    setThemeState(newTheme);
+    localStorage.setItem("offgrid-theme", newTheme);
+  };
+
+  useEffect(() => {
+    if (!mounted) return;
     const root = window.document.documentElement;
-
     root.classList.remove("light", "dark");
-
     if (theme === "system" && enableSystem) {
       const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
         .matches
         ? "dark"
         : "light";
-
       root.classList.add(systemTheme);
       return;
     }
-
     root.classList.add(theme);
-  }, [theme, enableSystem]);
+  }, [theme, enableSystem, mounted]);
 
   return (
     <ThemeProviderContext.Provider {...props} value={{ theme, setTheme }}>

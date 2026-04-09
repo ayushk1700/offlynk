@@ -157,7 +157,7 @@ export default function MessageBubble({ msg, isMe, index }: Props) {
         // Notify sender via WebRTC (remote peer)
         const peer = peersInstance[msg.senderId];
         if (peer) {
-          try { peer.send(JSON.stringify({ type: "read-ack", messageId: msg.id })); } catch { }
+          try { peer.send(JSON.stringify({ type: "read-ack", messageId: msg.id })); } catch (err) { console.error("RTC send error for read-ack:", err); }
         }
         obs.disconnect();
       }
@@ -171,7 +171,7 @@ export default function MessageBubble({ msg, isMe, index }: Props) {
     deleteMessageForEveryone(msg.id);
     if (currentUser) broadcastDeleteMessage(msg.id, currentUser.id);
     const sig = JSON.stringify({ type: "delete", messageId: msg.id });
-    Object.values(peersInstance).forEach((p) => { try { p.send(sig); } catch { } });
+    Object.values(peersInstance).forEach((p) => { try { p.send(sig); } catch (err) { console.error("RTC send error for signal:", err); } });
   };
 
   const handleResend = () => {

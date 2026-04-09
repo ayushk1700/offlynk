@@ -35,7 +35,7 @@ export function relayMessage(
     try {
       peer.send(JSON.stringify(envelope));
       return true;
-    } catch {}
+    } catch (err) { console.warn("Failed to relay message:", err); }
   }
   return false;
 }
@@ -65,6 +65,6 @@ export function handleRelay(
     if (updatedEnvelope.hops.includes(peerId)) continue;
     try {
       peer.send(JSON.stringify(updatedEnvelope));
-    } catch {}
+    } catch (err) { console.warn("Failed to forward relay message:", err); }
   }
 }

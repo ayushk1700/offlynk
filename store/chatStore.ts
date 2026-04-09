@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useUserStore } from './userStore';
 
 export interface Message {
   id: string;
@@ -71,22 +72,31 @@ export const useChatStore = create<ChatState>()(
           // Deduplicate
           if (state.messages.some((m) => m.id === msg.id)) return state;
 
-          const isIncoming = msg.senderId !== state.activeChatId;
+          const myId = useUserStore.getState().currentUser?.id;
+
           const chatKey =
             msg.receiverId === 'broadcast'
               ? 'broadcast'
-              : isIncoming ? msg.senderId : msg.receiverId;
+              : msg.senderId === myId ? msg.receiverId : msg.senderId;
 
-          const isActiveChat =
-            chatKey === state.activeChatId ||
-            (msg.receiverId === 'broadcast' && state.activeChatId === 'broadcast');
+          const isActiveChat = chatKey === state.activeChatId;
 
           const updatedPeers = { ...state.peers };
           if (updatedPeers[chatKey]) {
             updatedPeers[chatKey] = {
               ...updatedPeers[chatKey],
-              unreadCount: isActiveChat ? 0 : (updatedPeers[chatKey].unreadCount || 0) + 1,
+              unreadCount: isActiveChat || msg.senderId === myId ? 0 : (updatedPeers[chatKey].unreadCount || 0) + 1,
               lastSeen: msg.timestamp,
+            };
+          } else if (chatKey && chatKey !== myId && chatKey !== 'broadcast') {
+            updatedPeers[chatKey] = {
+              id: chatKey,
+              name: `Unknown Peer (${chatKey.substring(0, 4)})`,
+              publicKey: '',
+              isOnline: true,
+              unreadCount: isActiveChat || msg.senderId === myId ? 0 : 1,
+              lastSeen: msg.timestamp,
+              did: `did:offgrid:${chatKey}`
             };
           }
 

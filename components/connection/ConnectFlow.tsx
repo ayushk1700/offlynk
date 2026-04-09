@@ -120,7 +120,7 @@ export function ConnectFlow() {
             timestamp: parsed.timestamp, status: "delivered", type: "text",
           });
         }
-      } catch {}
+      } catch (err) { console.warn("Could not process payload:", err); }
     });
     peer.on("error", () => {});
     peer.on("close", () => {
@@ -171,7 +171,7 @@ export function ConnectFlow() {
         peersInstance[decoded.user.id] = peerRef.current;
       }
       setScanning(false);
-    } catch {}
+    } catch (err) { console.warn("Could not process scanned data:", err); }
   };
 
   const copy = (text: string) => {

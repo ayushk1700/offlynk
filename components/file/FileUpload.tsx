@@ -26,10 +26,8 @@ export function FileUpload({ onClose }: Props) {
     const isImage = file.type.startsWith("image/");
     const isVideo = file.type.startsWith("video/");
 
-    let dataUrl = "";
-    if (isImage || isVideo) {
-      dataUrl = URL.createObjectURL(file);
-    }
+    // Create a local preview URL for all files so they can be interacted with (downloaded, previewed)
+    const dataUrl = URL.createObjectURL(file);
 
     const fileData = {
       name: file.name,
@@ -60,7 +58,7 @@ export function FileUpload({ onClose }: Props) {
         transferId,
         currentUser.id,
         (data) => {
-          try { peer.send(data); } catch { }
+          try { peer.send(data); } catch (err) { console.error("Failed to send file chunk:", err); }
         },
         (pct) => {
           outgoingTransfers.set(transferId, { name: file.name, size: file.size, progress: pct });
