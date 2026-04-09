@@ -1,14 +1,14 @@
 /**
  * lib/firebase/profile.ts
  * Firestore profile CRUD using lazy Firebase initialization.
- * All functions gracefully no-op when Firebase is not configured.
  */
-import { isFirebaseConfigured, getFirebaseDb, getFirebaseStorage } from "@/lib/firebase";
+import { getFirebaseDb, getFirebaseStorage } from "@/lib/firebase";
 import type { Timestamp } from "firebase/firestore";
 
 export interface UserProfile {
   uid: string;
   phone: string;
+  email?: string;
   displayName: string;
   photoURL: string;
   about: string;
@@ -16,6 +16,7 @@ export interface UserProfile {
   lastSeen: Timestamp | null;
   privacyLastSeen: "everyone" | "contacts" | "nobody";
   privacyReadReceipts: boolean;
+  privacyTyping: boolean;
   privacyPhoto: "everyone" | "contacts" | "nobody";
   publicKey: string;
   did: string;
@@ -29,6 +30,7 @@ export const DEFAULT_PROFILE: Partial<UserProfile> = {
   status: "🟢 Available",
   privacyLastSeen: "everyone",
   privacyReadReceipts: true,
+  privacyTyping: true,
   privacyPhoto: "everyone",
 };
 
@@ -71,10 +73,7 @@ export async function uploadProfilePhoto(uid: string, blob: Blob): Promise<strin
 
 export async function saveFeedback(uid: string, message: string, category: string) {
   const db = await getFirebaseDb();
-  if (!db) {
-    // No Firebase — throw so FeedbackForm falls back to mailto:
-    throw new Error("Firebase not configured");
-  }
+  if (!db) throw new Error("Firebase not configured");
   const { addDoc, collection, serverTimestamp } = await import("firebase/firestore");
   await addDoc(collection(db, "feedback"), {
     uid, message, category,

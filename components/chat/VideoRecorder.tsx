@@ -1,196 +1,269 @@
 "use client";
-/**
- * VideoRecorder — WhatsApp-style video message.
- * Tap to start, tap stop icon to preview, send or discard.
- */
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Video, Square, Trash2, Play, Pause, SendHorizonal } from "lucide-react";
+
+import { useRef, useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { Video, X, Square, Send, FlipHorizontal, Trash2, Play, Pause } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export interface VideoMessageData {
   blobUrl: string;
-  duration: number;
   mimeType: string;
+  duration: number;
   size: number;
 }
 
-interface RecorderProps {
+interface Props {
   onSend: (data: VideoMessageData) => void;
-  onCancel?: () => void;
 }
 
-export function VideoRecorder({ onSend, onCancel }: RecorderProps) {
-  const [state, setState] = useState<"idle" | "recording" | "preview">("idle");
-  const [secs, setSecs] = useState(0);
-  const [preview, setPreview] = useState<VideoMessageData | null>(null);
-  const [error, setError] = useState("");
+export function VideoRecorder({ onSend }: Props) {
+  const [mounted, setMounted]       = useState(false);
+  const [open, setOpen]             = useState(false);
+  const [recording, setRecording]   = useState(false);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [facing, setFacing]         = useState<"user" | "environment">("user");
+  const [streamReady, setStreamReady] = useState(false);
+  const [duration, setDuration]     = useState(0);
+  const [playing, setPlaying]       = useState(false);
 
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const previewRef = useRef<HTMLVideoElement>(null);
+  const videoRef         = useRef<HTMLVideoElement>(null);
+  const streamRef        = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef        = useRef<Blob[]>([]);
+  const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const blobUrlRef       = useRef("");
 
-  const startRecording = async () => {
+  useEffect(() => {
+    setMounted(true);
+    return () => stopCamera();
+  }, []);
+
+  /* ── Camera lifecycle ── */
+  const startCamera = useCallback(async () => {
+    setStreamReady(false);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "environment" }, audio: true });
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-        ? "video/webm;codecs=vp9,opus" : "video/webm";
-      const recorder = new MediaRecorder(stream, { mimeType });
-      chunksRef.current = [];
-      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.muted = true; }
-
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        if (videoRef.current) videoRef.current.srcObject = null;
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        const blobUrl = URL.createObjectURL(blob);
-        setPreview({ blobUrl, duration: secs, mimeType, size: blob.size });
-        setState("preview");
-        if (timerRef.current) clearInterval(timerRef.current);
-      };
-
-      recorder.start(200);
-      mediaRef.current = recorder;
-      setState("recording");
-      setSecs(0);
-      timerRef.current = setInterval(() => setSecs((s) => {
-        if (s >= 60) { stopRecording(); return s; } // max 60s
-        return s + 1;
-      }), 1000);
-    } catch {
-      setError("Camera/microphone access denied");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.muted = true;
+      }
+      setStreamReady(true);
+    } catch (err) {
+      console.error("Camera denied", err);
     }
+  }, [facing]);
+
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setStreamReady(false);
+  }, []);
+
+  useEffect(() => {
+    if (open && !recordedBlob) startCamera();
+    if (!open) stopCamera();
+  }, [open, facing, recordedBlob, startCamera, stopCamera]);
+
+  /* ── Recording ── */
+  const startRecording = () => {
+    if (!streamRef.current) return;
+    chunksRef.current = [];
+    const mimeType = MediaRecorder.isTypeSupported("video/webm; codecs=vp9")
+      ? "video/webm; codecs=vp9"
+      : "video/webm";
+    const recorder = new MediaRecorder(streamRef.current, { mimeType });
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    recorder.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: mimeType });
+      setRecordedBlob(blob);
+      blobUrlRef.current = URL.createObjectURL(blob);
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.src = blobUrlRef.current;
+        videoRef.current.controls = false;
+        videoRef.current.muted = false;
+      }
+    };
+    recorder.start();
+    mediaRecorderRef.current = recorder;
+    setRecording(true);
+    setDuration(0);
+    timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
   };
 
   const stopRecording = () => {
-    mediaRef.current?.stop();
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+    setRecording(false);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    stopCamera();
   };
 
-  const send = () => {
-    if (preview) { onSend(preview); setPreview(null); setState("idle"); setSecs(0); }
+  /* ── Actions ── */
+  const handleSend = () => {
+    if (!recordedBlob) return;
+    onSend({ blobUrl: blobUrlRef.current, mimeType: recordedBlob.type, duration, size: recordedBlob.size });
+    closeAll();
   };
 
-  const discard = () => {
-    if (preview?.blobUrl) URL.revokeObjectURL(preview.blobUrl);
-    setPreview(null); setState("idle"); setSecs(0);
-    onCancel?.();
+  const handleDiscard = () => {
+    // go back to camera preview to re-record
+    if (videoRef.current) { videoRef.current.src = ""; videoRef.current.srcObject = null; }
+    setRecordedBlob(null);
+    setDuration(0);
+    setPlaying(false);
+    blobUrlRef.current = "";
   };
 
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+  const closeAll = () => {
+    stopRecording();
+    stopCamera();
+    handleDiscard();
+    setOpen(false);
+  };
 
-  const fmtSecs = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (playing) { v.pause(); setPlaying(false); }
+    else         { v.play();  setPlaying(true);  }
+  };
 
-  if (state === "idle") {
-    return (
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  /* ── Modal ── */
+  const modal = (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        >
+          <motion.div
+            initial={{ scale: 0.92, y: 20, opacity: 0 }}
+            animate={{ scale: 1,    y: 0,  opacity: 1 }}
+            exit={{ scale: 0.92,    y: 16, opacity: 0 }}
+            transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            className="relative w-full max-w-[340px] bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/10"
+            style={{ aspectRatio: "9/16", maxHeight: "78vh" }}
+          >
+            {/* ── Video element (preview + playback) ── */}
+            {!streamReady && !recordedBlob && (
+              <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm animate-pulse z-10">
+                Starting camera…
+              </div>
+            )}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              onEnded={() => setPlaying(false)}
+              className={`absolute inset-0 w-full h-full object-cover ${
+                facing === "user" && !recordedBlob ? "scale-x-[-1]" : ""
+              } ${!streamReady && !recordedBlob ? "hidden" : ""}`}
+            />
+
+            {/* ── Top bar ── */}
+            <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 pt-4 pb-8 bg-gradient-to-b from-black/70 to-transparent pointer-events-none">
+              <span className="text-white/70 text-[11px] font-semibold tracking-wider uppercase">
+                E2E Video
+              </span>
+              {(recording || recordedBlob) && (
+                <span className={`font-mono text-sm px-2 py-0.5 rounded-full ${recording ? "bg-red-500/80 text-white animate-pulse" : "bg-black/40 text-white/80"}`}>
+                  {fmt(duration)}
+                </span>
+              )}
+            </div>
+
+            {/* ── Bottom controls ── */}
+            <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-6 pb-7 pt-20 bg-gradient-to-t from-black/90 via-black/50 to-transparent">
+
+              {/* Left: Close / Discard */}
+              <button
+                type="button"
+                onClick={recordedBlob ? handleDiscard : closeAll}
+                className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors backdrop-blur-sm"
+                title={recordedBlob ? "Discard & re-record" : "Cancel"}
+              >
+                {recordedBlob ? <Trash2 className="w-5 h-5" /> : <X className="w-5 h-5" />}
+              </button>
+
+              {/* Center: Main action */}
+              {!recordedBlob ? (
+                <button
+                  type="button"
+                  onClick={recording ? stopRecording : startRecording}
+                  disabled={!streamReady}
+                  className="w-20 h-20 rounded-full border-4 border-white bg-transparent hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center disabled:opacity-40"
+                >
+                  {recording
+                    ? <Square className="w-8 h-8 text-red-500 fill-red-500" />
+                    : <div className="w-14 h-14 rounded-full bg-red-500 shadow-lg shadow-red-500/50" />}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  className="w-20 h-20 rounded-full bg-primary hover:bg-primary/90 active:scale-95 transition-all flex items-center justify-center shadow-xl shadow-primary/40"
+                >
+                  <Send className="w-8 h-8 text-primary-foreground ml-1" />
+                </button>
+              )}
+
+              {/* Right: Flip camera OR Play/Pause for playback */}
+              {recordedBlob ? (
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors backdrop-blur-sm"
+                  title="Play / Pause"
+                >
+                  {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))}
+                  disabled={recording}
+                  className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors backdrop-blur-sm disabled:opacity-0"
+                  title="Flip camera"
+                >
+                  <FlipHorizontal className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            {/* ── Hard close (X) ── */}
+            <button
+              type="button"
+              onClick={closeAll}
+              className="absolute top-4 right-4 z-30 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors backdrop-blur-sm"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  return (
+    <>
       <button
         type="button"
-        onClick={startRecording}
+        onClick={() => setOpen(true)}
         className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-        title="Record video message"
+        title="Record Video"
       >
         <Video className="w-5 h-5" />
       </button>
-    );
-  }
-
-  if (state === "recording") {
-    return (
-      <AnimatePresence>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="fixed inset-0 z-50 bg-black flex flex-col"
-        >
-          <video ref={videoRef} autoPlay playsInline muted className="flex-1 object-cover" />
-          {/* Overlay controls */}
-          <div className="absolute inset-x-0 bottom-0 flex flex-col items-center pb-10 bg-gradient-to-t from-black/80 to-transparent pt-12">
-            <div className="flex items-center gap-2 mb-6">
-              <motion.div animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }}>
-                <div className="w-3 h-3 rounded-full bg-destructive" />
-              </motion.div>
-              <span className="text-white font-mono text-lg font-bold">{fmtSecs(secs)}</span>
-            </div>
-            <button
-              type="button"
-              onClick={stopRecording}
-              className="w-16 h-16 rounded-full bg-white/20 border-4 border-white flex items-center justify-center hover:bg-white/30 transition-colors"
-            >
-              <Square className="w-7 h-7 text-white fill-white" />
-            </button>
-            <p className="text-white/60 text-xs mt-3">Tap to stop</p>
-          </div>
-          {error && (
-            <div className="absolute top-4 inset-x-4 bg-destructive/90 rounded-xl px-4 py-2 text-sm text-white text-center">{error}</div>
-          )}
-        </motion.div>
-      </AnimatePresence>
-    );
-  }
-
-  if (state === "preview" && preview) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="fixed inset-0 z-50 bg-black flex flex-col"
-      >
-        <video
-          ref={previewRef}
-          src={preview.blobUrl}
-          className="flex-1 object-contain"
-          controls
-          autoPlay
-        />
-        <div className="flex items-center justify-between px-6 py-6 bg-black">
-          <button
-            type="button" onClick={discard}
-            className="flex items-center gap-2 text-white/70 hover:text-white"
-          >
-            <Trash2 className="w-6 h-6" />
-          </button>
-          <span className="text-white/60 text-sm font-mono">{fmtSecs(preview.duration)}</span>
-          <button
-            type="button" onClick={send}
-            className="w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/30"
-          >
-            <SendHorizonal className="w-6 h-6 text-primary-foreground" />
-          </button>
-        </div>
-      </motion.div>
-    );
-  }
-
-  return null;
-}
-
-/* ── VideoPlayer bubble ────────────────────────────────────── */
-export function VideoPlayer({ blobUrl, duration }: { blobUrl: string; duration: number }) {
-  const [playing, setPlaying] = useState(false);
-  const ref = useRef<HTMLVideoElement>(null);
-  const fmtSecs = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
-
-  const toggle = () => {
-    if (!ref.current) return;
-    if (playing) { ref.current.pause(); setPlaying(false); }
-    else { ref.current.play(); setPlaying(true); }
-  };
-
-  return (
-    <div className="relative rounded-xl overflow-hidden max-w-[220px] cursor-pointer" onClick={toggle}>
-      <video ref={ref} src={blobUrl} className="w-full max-h-44 object-cover" onEnded={() => setPlaying(false)} />
-      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-        {!playing && (
-          <div className="w-10 h-10 rounded-full bg-white/80 flex items-center justify-center">
-            <Play className="w-5 h-5 text-black fill-black ml-0.5" />
-          </div>
-        )}
-      </div>
-      <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
-        {fmtSecs(duration)}
-      </div>
-    </div>
+      {mounted && createPortal(modal, document.body)}
+    </>
   );
 }

@@ -1,6 +1,5 @@
 "use client";
-import { useState } from "react";
-import { ArrowLeft, Eye, EyeOff, CheckCheck, Clock, Camera } from "lucide-react";
+import { ArrowLeft, CheckCheck, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { updateProfile } from "@/lib/firebase/profile";
@@ -8,10 +7,10 @@ import { updateProfile } from "@/lib/firebase/profile";
 interface Props { onBack: () => void; }
 
 export function PrivacySettings({ onBack }: Props) {
-  const { uid, privacyLastSeen, privacyReadReceipts, updatePrivacy, profile } = useAuthStore();
+  const { uid, privacyLastSeen, privacyReadReceipts, privacyTyping, updatePrivacy, profile } = useAuthStore();
 
   const save = async (key: string, value: unknown) => {
-    updatePrivacy(key as "privacyReadReceipts" | "privacyLastSeen", value as string | boolean);
+    updatePrivacy(key as "privacyReadReceipts" | "privacyLastSeen" | "privacyTyping", value as string | boolean);
     if (uid) await updateProfile(uid, { [key]: value });
   };
 
@@ -74,9 +73,6 @@ export function PrivacySettings({ onBack }: Props) {
               />
             ))}
           </div>
-          <p className="text-xs text-muted-foreground px-4 pt-2 opacity-60">
-            If you don't share your last seen, you won't be able to see others' last seen.
-          </p>
         </div>
 
         {/* Read Receipts */}
@@ -89,6 +85,20 @@ export function PrivacySettings({ onBack }: Props) {
               icon={<CheckCheck className="w-4 h-4" />}
               checked={privacyReadReceipts}
               onChange={() => save("privacyReadReceipts", !privacyReadReceipts)}
+            />
+          </div>
+        </div>
+
+        {/* Ambient Typing */}
+        <div className="mt-4 mb-2">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium px-4 pb-2">Typing Indicators</p>
+          <div className="bg-card border-y border-border">
+            <Toggle
+              label="Live Typing"
+              desc="Show others when you are typing a message."
+              icon={<MessageSquare className="w-4 h-4" />}
+              checked={privacyTyping}
+              onChange={() => save("privacyTyping", !privacyTyping)}
             />
           </div>
         </div>

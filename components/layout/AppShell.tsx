@@ -8,13 +8,13 @@ import { ConnectFlow } from "@/components/connection/ConnectFlow";
 import { OfflineIndicator } from "@/components/connection/OfflineIndicator";
 import { ProfilePage } from "@/components/profile/ProfilePage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
-import { MessageSquare, Radio } from "lucide-react";
+import { MessageSquare, Radio, ShieldAlert } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
 type Panel = null | "profile" | "settings";
 
 export function AppShell() {
-  const { activeChatId } = useChatStore();
+  const { activeChatId, setActiveChat } = useChatStore();
   const [panel, setPanel] = useState<Panel>(null);
 
   return (
@@ -27,6 +27,18 @@ export function AppShell() {
         "w-full md:w-[300px] lg:w-[360px]",
         activeChatId && !panel ? "hidden md:flex" : "flex",
       ].join(" ")}>
+
+        {/* Global Sidebar Header with Broadcast */}
+        <div className="px-4 py-3 border-b border-border bg-card/90 flex items-center justify-between shrink-0">
+          <h1 className="font-bold text-lg">Chats</h1>
+          <button
+            onClick={() => setActiveChat("broadcast")}
+            className="flex items-center gap-2 text-xs font-semibold bg-destructive/10 text-destructive hover:bg-destructive/20 px-3 py-1.5 rounded-full transition-colors"
+          >
+            <ShieldAlert className="w-4 h-4" />
+            <span>Broadcast</span>
+          </button>
+        </div>
 
         {/* Profile overlay */}
         <AnimatePresence>
@@ -84,8 +96,6 @@ export function AppShell() {
                 <h2 className="text-xl font-semibold text-foreground mb-2">Off-Grid Chat</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   Open another tab at <code className="text-xs bg-muted/60 px-1.5 py-0.5 rounded">?node=2</code> to auto-connect.
-                  <br />
-                  <span className="text-xs opacity-60">Use <strong>+</strong> to connect remote devices via passphrase or manual code.</span>
                 </p>
               </div>
               <div className="inline-flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 border border-border/40 px-4 py-2 rounded-full">
@@ -97,7 +107,6 @@ export function AppShell() {
         )}
       </main>
 
-      {/* Connection modal */}
       <ConnectFlow />
     </div>
   );

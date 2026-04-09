@@ -99,17 +99,44 @@ export const useChatStore = create<ChatState>()(
         })),
 
       addPeer: (peer) =>
-        set((state) => ({
-          peers: {
-            ...state.peers,
-            [peer.id]: {
-              ...peer,
-              did: peer.did || `did:offgrid:${peer.id}`,
-              unreadCount: state.peers[peer.id]?.unreadCount || 0,
-              lastSeen: state.peers[peer.id]?.lastSeen || Date.now(),
+        set((state) => {
+          // 1. Check if we already know this user by their ID OR their Public Key
+          const existingPeerId = Object.keys(state.peers).find(
+            (key) =>
+              key === peer.id ||
+              (state.peers[key].publicKey === peer.publicKey && key !== 'broadcast')
+          );
+
+          if (existingPeerId) {
+            // 2. If they exist, UPDATE the existing profile instead of creating a new one
+            return {
+              peers: {
+                ...state.peers,
+                [existingPeerId]: {
+                  ...state.peers[existingPeerId],
+                  ...peer, // Pull in new network state (like isOnline)
+                  id: existingPeerId, // Force the ID to stay the same so chat history links up!
+                  did: peer.did || state.peers[existingPeerId].did || `did:offgrid:${existingPeerId}`,
+                  unreadCount: state.peers[existingPeerId].unreadCount || 0,
+                  lastSeen: peer.isOnline ? Date.now() : (state.peers[existingPeerId].lastSeen || Date.now()),
+                },
+              },
+            };
+          }
+
+          // 3. If it's a genuinely new person, add them normally
+          return {
+            peers: {
+              ...state.peers,
+              [peer.id]: {
+                ...peer,
+                did: peer.did || `did:offgrid:${peer.id}`,
+                unreadCount: 0,
+                lastSeen: Date.now(),
+              },
             },
-          },
-        })),
+          };
+        }),
 
       updatePeerStatus: (id, isOnline) =>
         set((state) => {

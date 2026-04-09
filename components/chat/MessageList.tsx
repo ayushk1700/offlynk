@@ -9,25 +9,47 @@ import { ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getChannel } from "@/lib/webrtc/broadcastChannel";
 import { useFeatureStore } from "@/store/featureStore";
-import { motion } from "framer-motion";
+
+/** Tracks both typing presence and live ambient text per peer */
+interface TypingPeer {
+  id: string;
+  name: string;
+  liveText: string;
+}
 
 export default function MessageList() {
-  const { messages, activeChatId, deleteMessageLocally } = useChatStore();
+  const { messages, activeChatId, peers, deleteMessageLocally } = useChatStore();
   const { currentUser } = useUserStore();
   const { selfDestructChats } = useFeatureStore();
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [typingPeers, setTypingPeers] = useState<string[]>([]);
 
-  const activeMessages = messages.filter((m) =>
-    m.receiverId === activeChatId ||
-    m.senderId === activeChatId ||
-    (activeChatId === "broadcast" && m.receiverId === "broadcast")
-  );
+  /** Map of peerId → TypingPeer snapshot */
+  const [typingMap, setTypingMap] = useState<Record<string, TypingPeer>>({});
+  /** Expiry timers: peerId → timer id */
+  const expiryTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Auto-scroll
+  // 1. Strict filtering to prevent chat mix-ups
+  const activeMessages = messages.filter((m) => {
+    if (activeChatId === "broadcast") {
+      return m.receiverId === "broadcast";
+    }
+    return (
+      (m.receiverId === activeChatId || m.senderId === activeChatId) &&
+      m.receiverId !== "broadcast"
+    );
+  });
+
+  // 2. Clear typing indicators immediately when switching chats
+  useEffect(() => {
+    setTypingMap({});
+    Object.values(expiryTimers.current).forEach(clearTimeout);
+    expiryTimers.current = {};
+  }, [activeChatId]);
+
+  // 3. Fixed Auto-scroll (now triggers when liveText changes, not just on map length)
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeMessages.length]);
+  }, [activeMessages, typingMap]);
 
   // Self-destruct timer
   useEffect(() => {
@@ -36,16 +58,16 @@ export default function MessageList() {
     if (!mins) return;
 
     const ms = mins * 60 * 1000;
-    const now = Date.now();
 
-    // Delete messages older than the window
+    // Check immediately
+    const now = Date.now();
     activeMessages.forEach((m) => {
       if (now - m.timestamp > ms) {
         deleteMessageLocally(m.id);
       }
     });
 
-    // Check every 30s
+    // Check periodically
     const interval = setInterval(() => {
       const nowTs = Date.now();
       useChatStore.getState().messages.forEach((m) => {
@@ -54,25 +76,74 @@ export default function MessageList() {
         }
       });
     }, 30_000);
-    return () => clearInterval(interval);
-  }, [activeChatId, selfDestructChats]);
 
-  // Typing indicator via BroadcastChannel
+    return () => clearInterval(interval);
+  }, [activeChatId, selfDestructChats, activeMessages, deleteMessageLocally]);
+
+  /**
+   * Listen for both classic typing signals and ambient-typing events.
+   */
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !activeChatId) return;
     const ch = getChannel();
+
+    const clearPeer = (senderId: string) => {
+      if (expiryTimers.current[senderId]) clearTimeout(expiryTimers.current[senderId]);
+      setTypingMap((prev) => {
+        const n = { ...prev };
+        delete n[senderId];
+        return n;
+      });
+    };
+
+    const resetExpiry = (senderId: string, ms: number) => {
+      if (expiryTimers.current[senderId]) clearTimeout(expiryTimers.current[senderId]);
+      expiryTimers.current[senderId] = setTimeout(() => clearPeer(senderId), ms);
+    };
+
     const handler = (ev: MessageEvent) => {
       const { type, senderId, payload } = ev.data ?? {};
-      if (type !== "typing") return;
-      if (payload?.peerId !== currentUser?.id && activeChatId !== senderId) return;
-      setTypingPeers((prev) => prev.includes(senderId) ? prev : [...prev, senderId]);
-      setTimeout(() => setTypingPeers((prev) => prev.filter((id) => id !== senderId)), 2500);
-    };
-    ch.addEventListener("message", handler);
-    return () => ch.removeEventListener("message", handler);
-  }, [activeChatId, currentUser?.id]);
 
-  if (activeMessages.length === 0) {
+      // Ignore our own messages, and ignore typing from people who aren't the active chat!
+      if (senderId === currentUser?.id) return;
+      if (senderId !== activeChatId && activeChatId !== "broadcast") return;
+
+      if (type === "typing") {
+        const peerName = peers[senderId]?.name ?? "Someone";
+        setTypingMap((prev) => ({
+          ...prev,
+          [senderId]: { id: senderId, name: peerName, liveText: prev[senderId]?.liveText ?? "" },
+        }));
+        resetExpiry(senderId, 2500);
+        return;
+      }
+
+      if (type === "ambient-typing") {
+        const partialText: string = payload?.partialText ?? "";
+        const peerName = peers[senderId]?.name ?? "Someone";
+
+        if (!partialText.trim()) {
+          clearPeer(senderId);
+          return;
+        }
+
+        setTypingMap((prev) => ({
+          ...prev,
+          [senderId]: { id: senderId, name: peerName, liveText: partialText },
+        }));
+        resetExpiry(senderId, 4500);
+      }
+    };
+
+    ch.addEventListener("message", handler);
+    return () => {
+      ch.removeEventListener("message", handler);
+    };
+  }, [activeChatId, currentUser?.id, peers]);
+
+  const typingList = Object.values(typingMap);
+
+  if (activeMessages.length === 0 && typingList.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="text-center text-muted-foreground bg-muted/20 border border-border/40 rounded-2xl p-8 max-w-xs">
@@ -90,15 +161,25 @@ export default function MessageList() {
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-2 pb-2">
       {activeMessages.map((msg, idx) => {
         const isMe = msg.senderId === currentUser?.id;
-        const isBroadcastMsg = msg.receiverId === "broadcast" && !isMe;
+        const isBroadcastMsg = msg.receiverId === "broadcast";
 
         if (isBroadcastMsg) return <BroadcastMessage key={msg.id || idx} msg={msg} />;
         if (msg.type === "file") return <FileMessage key={msg.id || idx} msg={msg} isMe={isMe} />;
+
         return <MessageBubble key={msg.id || idx} msg={msg} isMe={isMe} index={idx} />;
       })}
 
-      {typingPeers.length > 0 && <TypingIndicator />}
-      <div ref={bottomRef} />
+      {/* Ambient / classic typing indicators */}
+      {typingList.map((tp) => (
+        <div key={tp.id} className="flex justify-start animate-in fade-in slide-in-from-bottom-2">
+          <TypingIndicator
+            peerName={tp.name}
+            liveText={tp.liveText}
+          />
+        </div>
+      ))}
+
+      <div ref={bottomRef} className="h-1" />
     </div>
   );
 }

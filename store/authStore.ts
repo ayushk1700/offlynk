@@ -10,6 +10,7 @@ interface AuthState {
   /* Firebase auth */
   uid: string | null;
   phone: string | null;
+  email: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 
@@ -18,14 +19,15 @@ interface AuthState {
 
   /* Privacy overrides (cached locally for offline use) */
   privacyReadReceipts: boolean;
+  privacyTyping: boolean;
   privacyLastSeen: "everyone" | "contacts" | "nobody";
 
   /* Actions */
-  setAuth: (uid: string, phone: string) => void;
+  setAuth: (uid: string, phone: string | null, email?: string | null) => void;
   setProfile: (profile: Partial<UserProfile>) => void;
   setLoading: (v: boolean) => void;
   signOut: () => void;
-  updatePrivacy: (key: "privacyReadReceipts" | "privacyLastSeen", value: boolean | string) => void;
+  updatePrivacy: (key: "privacyReadReceipts" | "privacyLastSeen" | "privacyTyping", value: boolean | string) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -33,16 +35,18 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       uid: null,
       phone: null,
+      email: null,
       isAuthenticated: false,
       isLoading: true,
       profile: null,
       privacyReadReceipts: true,
+      privacyTyping: true,
       privacyLastSeen: "everyone",
 
-      setAuth: (uid, phone) => set({ uid, phone, isAuthenticated: true, isLoading: false }),
+      setAuth: (uid, phone, email) => set({ uid, phone, email, isAuthenticated: true, isLoading: false }),
       setProfile: (profile) => set({ profile }),
       setLoading: (v) => set({ isLoading: v }),
-      signOut: () => set({ uid: null, phone: null, isAuthenticated: false, profile: null }),
+      signOut: () => set({ uid: null, phone: null, email: null, profile: null, isAuthenticated: false, isLoading: false }),
       updatePrivacy: (key, value) => set({ [key]: value } as Partial<AuthState>),
     }),
     { name: "offgrid-auth-v1" }

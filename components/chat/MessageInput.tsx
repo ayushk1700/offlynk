@@ -2,13 +2,16 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useChatStore, useUserStore } from "@/store";
+import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Send, ShieldAlert, X, Paperclip } from "lucide-react";
 import { generateId } from "@/lib/utils/helpers";
 import { peersInstance } from "@/components/connection/PeerDiscovery";
-import { sendLocalMessage, sendTypingSignal } from "@/lib/webrtc/broadcastChannel";
+import { sendLocalMessage, sendTypingSignal, sendAmbientTyping } from "@/lib/webrtc/broadcastChannel";
 import { EmojiPicker } from "./EmojiPicker";
-import { VoiceRecorder, VoiceMessageData } from "./VoiceRecorder";
+
+// FIX: Removed VoicePlayer and changed import path to "./VoiceRecorder"
+import { VoiceMessageData, VoiceRecorder } from "./VoicePlayer";
 import { VideoRecorder, VideoMessageData } from "./VideoRecorder";
 import { CameraCapture } from "./CameraCapture";
 import { FileUpload } from "@/components/file/FileUpload";
@@ -46,12 +49,15 @@ export default function MessageInput() {
     // Send via BroadcastChannel (tabs) + WebRTC (remote)
     sendLocalMessage({ id, senderId: currentUser.id, senderName: currentUser.name, receiverId: activeChatId, content, timestamp: ts });
     const rtcPeer = peersInstance[activeChatId];
-    if (rtcPeer) { try { rtcPeer.send(JSON.stringify({ ...msgData, type: "message" })); } catch {} }
+    if (rtcPeer) { try { rtcPeer.send(JSON.stringify({ ...msgData, type: "message" })); } catch { } }
     else if (activeChatId === "broadcast") {
-      Object.values(peersInstance).forEach((p) => { try { p.send(JSON.stringify({ ...msgData, type: "message" })); } catch {} });
+      Object.values(peersInstance).forEach((p) => { try { p.send(JSON.stringify({ ...msgData, type: "message" })); } catch { } });
     }
 
     useChatStore.getState().updateMessageStatus(id, "sent");
+
+    // Clear ambient typing now that message is sent
+    if (activeChatId && currentUser) sendAmbientTyping(currentUser.id, activeChatId, "");
   };
 
   /* ── Send voice ────────────────────────────────────────── */
@@ -92,10 +98,17 @@ export default function MessageInput() {
     const id = generateId();
     const ts = Date.now();
 
+    const newFileData = {
+      name: "photo.jpg",
+      size: blob.size,
+      mimeType: "image/jpeg",
+      dataUrl: dataUrl
+    };
+
     addMessage({
       id, senderId: currentUser.id, receiverId: activeChatId, content: "📷 Photo",
       timestamp: ts, status: "sending", type: "image",
-      fileData: { name: "photo.jpg", size: blob.size, mimeType: "image/jpeg", dataUrl },
+      fileData: newFileData,
       did: `did:offgrid:${currentUser.id}`,
     });
 
@@ -106,7 +119,7 @@ export default function MessageInput() {
       const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
       outgoingTransfers.set(transferId, { name: "photo.jpg", size: blob.size, progress: 0 });
       sendFile(file, transferId, currentUser.id, (data) => {
-        try { peer.send(data); } catch {}
+        try { peer.send(data); } catch { }
       }, (pct) => {
         outgoingTransfers.set(transferId, { name: "photo.jpg", size: blob.size, progress: pct });
       }).then(() => {
@@ -114,7 +127,6 @@ export default function MessageInput() {
         useChatStore.getState().updateMessageStatus(id, "delivered");
       });
     } else {
-      // Same-tab: already stored via addMessage with dataUrl
       useChatStore.getState().updateMessageStatus(id, "sent");
     }
   };
@@ -128,9 +140,18 @@ export default function MessageInput() {
     setText(e.target.value);
     e.target.style.height = "auto";
     e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px";
-    if (activeChatId && currentUser) sendTypingSignal(currentUser.id, activeChatId);
+
+    const { privacyTyping } = useAuthStore.getState();
+
+    if (activeChatId && currentUser && privacyTyping) {
+      sendTypingSignal(currentUser.id, activeChatId);
+      sendAmbientTyping(currentUser.id, activeChatId, e.target.value);
+    }
+
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    typingTimerRef.current = setTimeout(() => {}, 2000);
+    typingTimerRef.current = setTimeout(() => {
+      if (activeChatId && currentUser) sendAmbientTyping(currentUser.id, activeChatId, "");
+    }, 4000);
   };
 
   const insertEmoji = (emoji: string) => {
@@ -165,11 +186,10 @@ export default function MessageInput() {
         <button
           type="button"
           onClick={() => setShowFileUpload((v) => !v)}
-          className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${
-            showFileUpload
-              ? "text-primary bg-primary/10"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-          }`}
+          className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${showFileUpload
+            ? "text-primary bg-primary/10"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            }`}
           title="Attach file"
         >
           {showFileUpload ? <X className="w-5 h-5" /> : <Paperclip className="w-5 h-5" />}
@@ -202,11 +222,10 @@ export default function MessageInput() {
             type="submit"
             size="icon"
             disabled={!text.trim() && !isBroadcast}
-            className={`shrink-0 h-10 w-10 rounded-2xl transition-all ${
-              isBroadcast
-                ? "bg-destructive hover:bg-destructive/80 text-destructive-foreground"
-                : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20"
-            }`}
+            className={`shrink-0 h-10 w-10 rounded-2xl transition-all ${isBroadcast
+              ? "bg-destructive hover:bg-destructive/80 text-destructive-foreground"
+              : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20"
+              }`}
           >
             {isBroadcast ? <ShieldAlert className="w-4 h-4" /> : <Send className="w-4 h-4" />}
           </Button>

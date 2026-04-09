@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useUserStore } from "@/store/userStore";
 import { useAuthStore } from "@/store/authStore";
-import { PhoneAuth } from "@/components/auth/PhoneAuth";
+import { EmailAuth } from "@/components/auth/EmailAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import { PermissionGate } from "@/components/ui/PermissionGate";
 import { LocalChatProvider } from "@/components/connection/LocalChatProvider";
@@ -67,7 +67,7 @@ export default function HomePage() {
 
   if (appState === "auth") {
     return (
-      <PhoneAuth
+      <EmailAuth
         onComplete={() => {
           const permsDone = sessionStorage.getItem("perms-done") === "1";
           setAppState(permsDone ? "app" : "permissions");

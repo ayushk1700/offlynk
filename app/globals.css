@@ -1,14 +1,31 @@
 @import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @plugin "tailwindcss-animate";
 
 /* ── dvh / svh viewport height utilities ───────────────────── */
 @layer utilities {
-  .min-h-dvh  { min-height: 100dvh; }
-  .h-dvh      { height: 100dvh; }
-  .\!h-dvh    { height: 100dvh !important; }
-  .h-\[100dvh\] { height: 100dvh; }
-  .min-h-\[100dvh\] { min-height: 100dvh; }
+  .min-h-dvh {
+    min-height: 100dvh;
+  }
+
+  .h-dvh {
+    height: 100dvh;
+  }
+
+  .\!h-dvh {
+    height: 100dvh !important;
+  }
+
+  .h-\[100dvh\] {
+    height: 100dvh;
+  }
+
+  .min-h-\[100dvh\] {
+    min-height: 100dvh;
+  }
 }
 
 /* ── Design Tokens (Tailwind v4 @theme) ────────────────────── */
@@ -23,53 +40,53 @@
 /* ── CSS Variable Palette ───────────────────────────────────── */
 @layer base {
   :root {
-    /* Light mode — warm paper */
-    --background: 35 18% 95%;       /* warm off-white paper */
-    --foreground: 20 15% 8%;        /* near-black ink */
-    --card: 35 14% 97%;             /* slightly lighter paper card */
-    --card-foreground: 20 15% 8%;
-    --popover: 35 14% 97%;
-    --popover-foreground: 20 15% 8%;
-    --primary: 20 12% 10%;          /* dark ink primary */
-    --primary-foreground: 35 18% 96%;
-    --secondary: 32 12% 91%;
-    --secondary-foreground: 20 12% 10%;
-    --muted: 32 10% 92%;
-    --muted-foreground: 20 8% 42%;
-    --accent: 32 12% 88%;
-    --accent-foreground: 20 12% 10%;
-    --destructive: 0 82% 55%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 30 12% 84%;
-    --input: 30 12% 84%;
-    --ring: 20 12% 10%;
-    --radius: 0.5rem;
+    /* LIGHT THEME - Warm Paper & Dark Ink */
+    --background: 40 33% 96%;
+    --foreground: 20 10% 15%;
+    --card: 40 30% 98%;
+    --card-foreground: 20 10% 15%;
+    --popover: 40 30% 98%;
+    --popover-foreground: 20 10% 15%;
+    --primary: 20 10% 15%;
+    --primary-foreground: 40 33% 96%;
+    --secondary: 40 20% 90%;
+    --secondary-foreground: 20 10% 15%;
+    --muted: 40 15% 88%;
+    --muted-foreground: 20 5% 40%;
+    --accent: 40 20% 90%;
+    --accent-foreground: 20 10% 15%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 40 33% 96%;
+    --border: 40 15% 85%;
+    --input: 40 15% 85%;
+    --ring: 20 10% 15%;
+    --radius: 0.75rem;
   }
 
   .dark {
-    /* Dark mode — dark aged paper */
-    --background: 22 12% 7%;        /* very dark warm black */
-    --foreground: 35 8% 93%;        /* warm white ink */
-    --card: 22 10% 10%;             /* slightly lighter dark paper */
-    --card-foreground: 35 8% 93%;
-    --popover: 22 10% 10%;
-    --popover-foreground: 35 8% 93%;
-    --primary: 35 12% 90%;          /* light ink */
-    --primary-foreground: 22 12% 8%;
-    --secondary: 22 8% 16%;
-    --secondary-foreground: 35 8% 90%;
-    --muted: 22 8% 16%;
-    --muted-foreground: 30 5% 56%;
-    --accent: 22 8% 18%;
-    --accent-foreground: 35 8% 90%;
-    --destructive: 0 72% 50%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 22 7% 18%;
-    --input: 22 7% 18%;
-    --ring: 35 12% 85%;
+    /* DARK THEME - Dark Slate Paper & White Ink */
+    --background: 0 0% 12%;
+    --foreground: 0 0% 90%;
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 90%;
+    --popover: 0 0% 15%;
+    --popover-foreground: 0 0% 90%;
+    --primary: 0 0% 90%;
+    --primary-foreground: 0 0% 12%;
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 0 0% 90%;
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 0 0% 20%;
+    --accent-foreground: 0 0% 90%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 90%;
+    --border: 0 0% 25%;
+    --input: 0 0% 25%;
+    --ring: 0 0% 90%;
   }
 
-  /* Global resets */
+  /* FIXED: Consolidated Global Resets without using @apply */
   * {
     border-color: hsl(var(--border));
     box-sizing: border-box;
@@ -81,74 +98,221 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  /* Global Paper Texture Overlay - Applies to EVERY Component natively */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    background-image: url('/textures/paper-texture.svg');
+    background-repeat: repeat;
+    background-size: 300px;
+    opacity: 0.45;
+    mix-blend-mode: multiply;
+  }
+
+  .dark body::after {
+    opacity: 0.15;
+    mix-blend-mode: overlay;
   }
 }
 
-/* ── Semantic utility shims (Tailwind v4 doesn't auto-generate hsl(var) utils) ── */
+/* ── Semantic utility shims ─────────────────────────────────── */
 @layer utilities {
-  .bg-background  { background-color: hsl(var(--background)); }
-  .bg-foreground  { background-color: hsl(var(--foreground)); }
-  .bg-card        { background-color: hsl(var(--card)); }
-  .bg-muted       { background-color: hsl(var(--muted)); }
-  .bg-primary     { background-color: hsl(var(--primary)); }
-  .bg-secondary   { background-color: hsl(var(--secondary)); }
-  .bg-accent      { background-color: hsl(var(--accent)); }
-  .bg-destructive { background-color: hsl(var(--destructive)); }
-  .bg-popover     { background-color: hsl(var(--popover)); }
+  .bg-background {
+    background-color: hsl(var(--background));
+  }
 
-  .text-foreground          { color: hsl(var(--foreground)); }
-  .text-muted-foreground    { color: hsl(var(--muted-foreground)); }
-  .text-primary             { color: hsl(var(--primary)); }
-  .text-primary-foreground  { color: hsl(var(--primary-foreground)); }
-  .text-secondary-foreground{ color: hsl(var(--secondary-foreground)); }
-  .text-accent-foreground   { color: hsl(var(--accent-foreground)); }
-  .text-destructive         { color: hsl(var(--destructive)); }
-  .text-destructive-foreground { color: hsl(var(--destructive-foreground)); }
-  .text-card-foreground     { color: hsl(var(--card-foreground)); }
-  .text-popover-foreground  { color: hsl(var(--popover-foreground)); }
+  .bg-foreground {
+    background-color: hsl(var(--foreground));
+  }
 
-  .border-border  { border-color: hsl(var(--border)); }
-  .border-input   { border-color: hsl(var(--input)); }
-  .border-ring    { border-color: hsl(var(--ring)); }
+  .bg-card {
+    background-color: hsl(var(--card));
+  }
 
-  .ring-ring { --tw-ring-color: hsl(var(--ring)); }
-  .ring-offset-background { --tw-ring-offset-color: hsl(var(--background)); }
+  .bg-muted {
+    background-color: hsl(var(--muted));
+  }
+
+  .bg-primary {
+    background-color: hsl(var(--primary));
+  }
+
+  .bg-secondary {
+    background-color: hsl(var(--secondary));
+  }
+
+  .bg-accent {
+    background-color: hsl(var(--accent));
+  }
+
+  .bg-destructive {
+    background-color: hsl(var(--destructive));
+  }
+
+  .bg-popover {
+    background-color: hsl(var(--popover));
+  }
+
+  .bg-input {
+    background-color: hsl(var(--input));
+  }
+
+  .text-foreground {
+    color: hsl(var(--foreground));
+  }
+
+  .text-muted-foreground {
+    color: hsl(var(--muted-foreground));
+  }
+
+  .text-primary {
+    color: hsl(var(--primary));
+  }
+
+  .text-primary-foreground {
+    color: hsl(var(--primary-foreground));
+  }
+
+  .text-secondary-foreground {
+    color: hsl(var(--secondary-foreground));
+  }
+
+  .text-accent-foreground {
+    color: hsl(var(--accent-foreground));
+  }
+
+  .text-destructive {
+    color: hsl(var(--destructive));
+  }
+
+  .text-destructive-foreground {
+    color: hsl(var(--destructive-foreground));
+  }
+
+  .text-card-foreground {
+    color: hsl(var(--card-foreground));
+  }
+
+  .text-popover-foreground {
+    color: hsl(var(--popover-foreground));
+  }
+
+  .border-border {
+    border-color: hsl(var(--border));
+  }
+
+  .border-input {
+    border-color: hsl(var(--input));
+  }
+
+  .border-ring {
+    border-color: hsl(var(--ring));
+  }
+
+  .ring-ring {
+    --tw-ring-color: hsl(var(--ring));
+  }
+
+  .ring-offset-background {
+    --tw-ring-offset-color: hsl(var(--background));
+  }
 
   /* Opacity variants */
-  .bg-muted\/40  { background-color: hsl(var(--muted) / 0.4); }
-  .bg-muted\/50  { background-color: hsl(var(--muted) / 0.5); }
-  .bg-muted\/60  { background-color: hsl(var(--muted) / 0.6); }
-  .bg-card\/50   { background-color: hsl(var(--card) / 0.5); }
-  .bg-card\/80   { background-color: hsl(var(--card) / 0.8); }
-  .bg-background\/50 { background-color: hsl(var(--background) / 0.5); }
-  .bg-primary\/5  { background-color: hsl(var(--primary) / 0.05); }
-  .text-primary-foreground\/60 { color: hsl(var(--primary-foreground) / 0.6); }
-  .text-primary-foreground\/70 { color: hsl(var(--primary-foreground) / 0.7); }
-  .border-border\/50 { border-color: hsl(var(--border) / 0.5); }
-  .border-border\/60 { border-color: hsl(var(--border) / 0.6); }
-  .border-border\/80 { border-color: hsl(var(--border) / 0.8); }
-  .border-primary\/30 { border-color: hsl(var(--primary) / 0.3); }
-  .bg-destructive\/90 { background-color: hsl(var(--destructive) / 0.9); }
-  .bg-input { background-color: hsl(var(--input)); }
+  .bg-muted\/40 {
+    background-color: hsl(var(--muted) / 0.4);
+  }
+
+  .bg-muted\/50 {
+    background-color: hsl(var(--muted) / 0.5);
+  }
+
+  .bg-muted\/60 {
+    background-color: hsl(var(--muted) / 0.6);
+  }
+
+  .bg-card\/50 {
+    background-color: hsl(var(--card) / 0.5);
+  }
+
+  .bg-card\/80 {
+    background-color: hsl(var(--card) / 0.8);
+  }
+
+  .bg-background\/50 {
+    background-color: hsl(var(--background) / 0.5);
+  }
+
+  .bg-primary\/5 {
+    background-color: hsl(var(--primary) / 0.05);
+  }
+
+  .bg-destructive\/90 {
+    background-color: hsl(var(--destructive) / 0.9);
+  }
+
+  .text-primary-foreground\/60 {
+    color: hsl(var(--primary-foreground) / 0.6);
+  }
+
+  .text-primary-foreground\/70 {
+    color: hsl(var(--primary-foreground) / 0.7);
+  }
+
+  .border-border\/50 {
+    border-color: hsl(var(--border) / 0.5);
+  }
+
+  .border-border\/60 {
+    border-color: hsl(var(--border) / 0.6);
+  }
+
+  .border-border\/80 {
+    border-color: hsl(var(--border) / 0.8);
+  }
+
+  .border-primary\/30 {
+    border-color: hsl(var(--primary) / 0.3);
+  }
 
   /* Radius */
-  .rounded-sm { border-radius: var(--radius-sm); }
-  .rounded-md { border-radius: var(--radius-md); }
-  .rounded-lg { border-radius: var(--radius-lg); }
+  .rounded-sm {
+    border-radius: var(--radius-sm);
+  }
+
+  .rounded-md {
+    border-radius: var(--radius-md);
+  }
+
+  .rounded-lg {
+    border-radius: var(--radius-lg);
+  }
 }
 
 /* ── Custom Scrollbar ───────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 ::-webkit-scrollbar-thumb {
   background: hsl(var(--muted-foreground) / 0.4);
   border-radius: 999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.7);
 }
 
-/* ── Paper texture overlay ──────────────────────────────────── */
+/* ── Paper texture overlay (Generated Base) ─────────────────── */
 /* Light mode: subtle warm grain */
 body::before {
   content: "";
@@ -171,6 +335,7 @@ body::before {
 .paper-texture {
   position: relative;
 }
+
 .paper-texture::after {
   content: "";
   position: absolute;
@@ -188,7 +353,17 @@ body::before {
 
 /* Smooth ink animation */
 @keyframes ink-in {
-  from { opacity: 0; transform: translateY(6px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
-.animate-ink { animation: ink-in 0.18s ease-out both; }
+
+.animate-ink {
+  animation: ink-in 0.18s ease-out both;
+}

@@ -18,6 +18,7 @@ export type BCMessageType =
   | "announce"
   | "message"
   | "typing"
+  | "ambient-typing"
   | "ping"
   | "pong"
   | "leave"
@@ -72,6 +73,18 @@ export function sendLocalMessage(payload: {
 
 export function sendTypingSignal(senderId: string, peerId: string) {
   getChannel().postMessage({ type: "typing", senderId, payload: { peerId } });
+}
+
+/**
+ * Streams the partial text the user is currently composing to the peer
+ * ("ambient typing" / live preview). Text is cleared when the message sends.
+ */
+export function sendAmbientTyping(senderId: string, peerId: string, partialText: string) {
+  getChannel().postMessage({
+    type: "ambient-typing",
+    senderId,
+    payload: { peerId, partialText },
+  });
 }
 
 /**
