@@ -7,15 +7,20 @@ import { EmailAuth } from "@/components/auth/EmailAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import { PermissionGate } from "@/components/ui/PermissionGate";
 import { LocalChatProvider } from "@/components/connection/LocalChatProvider";
-import { isFirebaseConfigured } from "@/lib/firebase";
+import { SplashScreen } from "@/components/ui/SplashScreen";
+import { AnimatePresence } from "framer-motion";
 
-type AppState = "loading" | "auth" | "permissions" | "app";
+type AppState = "evaluating" | "auth" | "permissions" | "app";
 
 export default function HomePage() {
   const { currentUser } = useUserStore();
   const { isAuthenticated, setAuth, setLoading } = useAuthStore();
-  const [appState, setAppState] = useState<AppState>("loading");
-  const [permDone, setPermDone] = useState(false);
+
+  // App routing state
+  const [appState, setAppState] = useState<AppState>("evaluating");
+
+  // Splash screen state (fixes the undefined error)
+  const [appReady, setAppReady] = useState(false);
 
   // Register service worker
   useEffect(() => {
@@ -24,7 +29,7 @@ export default function HomePage() {
     }
   }, []);
 
-  // Determine app state
+  // Determine app state (Auth -> Permissions -> App)
   useEffect(() => {
     const check = async () => {
       // If no local identity → go to auth
@@ -52,44 +57,49 @@ export default function HomePage() {
     // Small delay for hydration
     const t = setTimeout(check, 200);
     return () => clearTimeout(t);
-  }, [currentUser, isAuthenticated]);
-
-  if (appState === "loading") {
-    return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-background paper-texture">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-          <p className="text-sm text-muted-foreground">Loading OffLynk…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (appState === "auth") {
-    return (
-      <EmailAuth
-        onComplete={() => {
-          const permsDone = sessionStorage.getItem("perms-done") === "1";
-          setAppState(permsDone ? "app" : "permissions");
-        }}
-      />
-    );
-  }
-
-  if (appState === "permissions") {
-    return (
-      <PermissionGate
-        onDone={() => {
-          sessionStorage.setItem("perms-done", "1");
-          setAppState("app");
-        }}
-      />
-    );
-  }
+  }, [currentUser, isAuthenticated, setAuth, setLoading]);
 
   return (
-    <LocalChatProvider>
-      <AppShell />
-    </LocalChatProvider>
+    <>
+      <AnimatePresence>
+        {!appReady && (
+          <SplashScreen
+            key="splash"
+            onComplete={() => setAppReady(true)}
+            duration={3000} // Plays the animation for 3 seconds
+          />
+        )}
+      </AnimatePresence>
+
+      {/* The actual application content renders beneath the splash screen once ready */}
+      {appReady && (
+        <>
+          {appState === "auth" && (
+            <EmailAuth
+              onComplete={() => {
+                const permsDone = sessionStorage.getItem("perms-done") === "1";
+                setAppState(permsDone ? "app" : "permissions");
+              }}
+            />
+          )}
+
+          {appState === "permissions" && (
+            <PermissionGate
+              onDone={() => {
+                sessionStorage.setItem("perms-done", "1");
+                setAppState("app");
+              }}
+            />
+          )}
+
+          {/* Fix: Render the actual app shell here, not EmailAuth */}
+          {appState === "app" && (
+            <LocalChatProvider>
+              <AppShell />
+            </LocalChatProvider>
+          )}
+        </>
+      )}
+    </>
   );
 }

@@ -2,18 +2,17 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Message, useChatStore } from "@/store/chatStore";
-import { useUserStore } from "@/store";
+import { useUserStore } from "@/store/userStore";
 import { cn, formatTime } from "@/lib/utils/helpers";
 import {
   Check, CheckCheck, Clock, AlertCircle,
   ShieldCheck, Trash2, Trash, Ban, RotateCcw, Download,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { broadcastDeleteMessage, broadcastReadAck } from "@/lib/webrtc/broadcastChannel";
+import { broadcastReadAck, sendLocalMessage } from "@/lib/webrtc/broadcastChannel";
 import { peersInstance } from "@/components/connection/PeerDiscovery";
 import { VoicePlayer } from "./VoicePlayer";
-import { sendLocalMessage } from "@/lib/webrtc/broadcastChannel";
-
+import { ControlPacket } from "@/types/network";
 
 /* ── Status tick icons (Proof of Delivery) ──────────────────── */
 const StatusIcon = ({
@@ -156,22 +155,40 @@ export default function MessageBubble({ msg, isMe, index }: Props) {
         broadcastReadAck(msg.id, currentUser.id);
         // Notify sender via WebRTC (remote peer)
         const peer = peersInstance[msg.senderId];
-        if (peer) {
-          try { peer.send(JSON.stringify({ type: "read-ack", messageId: msg.id })); } catch (err) { console.error("RTC send error for read-ack:", err); }
+        if (peer && peer.connected) {
+          try {
+            peer.send(JSON.stringify({ type: "control", action: "read", targetId: msg.id }));
+          } catch (err) {
+            console.error("RTC send error for read-ack:", err);
+          }
         }
         obs.disconnect();
       }
     }, { threshold: 0.5 });
     obs.observe(el);
     return () => obs.disconnect();
-  }, [msg.id, isMe, msg.status]);
+  }, [msg.id, isMe, msg.status, currentUser, updateMessageStatus, msg.senderId, msg.deletedForEveryone]);
 
   const handleDeleteForMe = () => deleteMessageLocally(msg.id);
+
   const handleDeleteForEveryone = () => {
+    // 1. Update own UI locally using the msg object from the component scope
     deleteMessageForEveryone(msg.id);
-    if (currentUser) broadcastDeleteMessage(msg.id, currentUser.id);
-    const sig = JSON.stringify({ type: "delete", messageId: msg.id });
-    Object.values(peersInstance).forEach((p) => { try { p.send(sig); } catch (err) { console.error("RTC send error for signal:", err); } });
+
+    // 2. Construct Control Packet
+    const packet: ControlPacket = {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      type: 'control',
+      action: 'delete_message',
+      targetId: msg.id,
+    };
+
+    // 3. Send via WebRTC to the recipient
+    const peer = peersInstance[msg.receiverId];
+    if (peer && peer.connected) {
+      peer.send(JSON.stringify(packet));
+    }
   };
 
   const handleResend = () => {
@@ -199,8 +216,6 @@ export default function MessageBubble({ msg, isMe, index }: Props) {
 
   /* Voice message */
   if (msg.type === "voice" && msg.fileData?.blobUrl) {
-
-    // THE FIX: Type cast fileData so TypeScript stops complaining
     const safeFileData = msg.fileData as { blobUrl: string; duration?: number };
     const blobUrl = safeFileData.blobUrl;
     const duration = safeFileData.duration ?? 0;
@@ -217,7 +232,6 @@ export default function MessageBubble({ msg, isMe, index }: Props) {
           "rounded-2xl px-4 py-3 shadow-sm min-w-[200px]",
           isMe ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-card border border-border/60 rounded-tl-sm"
         )}>
-          {/* Pass the extracted and type-safe variables */}
           <VoicePlayer blobUrl={blobUrl} duration={duration} />
         </div>
         <div className={cn("flex items-center gap-1 text-[10px] px-1", isMe ? "text-primary-foreground/60" : "text-muted-foreground")}>
@@ -228,6 +242,7 @@ export default function MessageBubble({ msg, isMe, index }: Props) {
       </motion.div>
     );
   }
+
   /* Image message */
   if (msg.type === "image") {
     return (

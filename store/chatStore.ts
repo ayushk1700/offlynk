@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useUserStore } from './userStore';
+import { set as idbSet, get as idbGet, del as idbDel } from 'idb-keyval';
+import { ControlAction } from '@/types/network';
 
 export interface Message {
   id: string;
@@ -14,14 +16,14 @@ export interface Message {
     name: string;
     size?: number;
     mimeType?: string;
-    dataUrl?: string;       // base64 for images/small files
-    blobUrl?: string;       // object URL for voice
-    duration?: number;      // voice message duration (secs)
-    transferId?: string;    // for large file tracking
+    dataUrl?: string;       // In-memory only (stripped before saving)
+    blobUrl?: string;
+    duration?: number;
+    transferId?: string;
+    hasLocalIndexedDb?: boolean; // Flag to indicate heavy data is stored in IDB
   };
   deletedForEveryone?: boolean;
   deletedLocally?: boolean;
-  /** DID of sender: did:offlynk:{userId} */
   did?: string;
 }
 
@@ -32,7 +34,6 @@ export interface ChatNode {
   lastSeen?: number;
   isOnline: boolean;
   unreadCount: number;
-  /** Decentralized ID */
   did?: string;
 }
 
@@ -40,7 +41,7 @@ interface ChatState {
   messages: Message[];
   peers: Record<string, ChatNode>;
   activeChatId: string | null;
-  addMessage: (msg: Message) => void;
+  addMessage: (msg: Message) => Promise<void>; // Upgraded to async for IDB
   updateMessageStatus: (id: string, status: Message['status']) => void;
   addPeer: (peer: ChatNode) => void;
   updatePeerStatus: (id: string, isOnline: boolean) => void;
@@ -49,11 +50,12 @@ interface ChatState {
   markRead: (peerId: string) => void;
   deleteMessageLocally: (id: string) => void;
   deleteMessageForEveryone: (id: string) => void;
+  executeRemoteControlAction: (action: ControlAction, targetId: string) => void;
 }
 
 export const useChatStore = create<ChatState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       messages: [],
       peers: {
         broadcast: {
@@ -67,21 +69,25 @@ export const useChatStore = create<ChatState>()(
       },
       activeChatId: null,
 
-      addMessage: (msg) =>
+      addMessage: async (msg) => {
+        // 1. Offload heavy files to IndexedDB to save LocalStorage
+        if (msg.fileData?.dataUrl) {
+          await idbSet(`file_${msg.id}`, msg.fileData.dataUrl);
+          msg.fileData.hasLocalIndexedDb = true;
+          msg.fileData.dataUrl = undefined; // Strip it from memory
+        }
+
         set((state) => {
-          // Deduplicate
+          // Strict Deduplication based on Crypto ID
           if (state.messages.some((m) => m.id === msg.id)) return state;
 
           const myId = useUserStore.getState().currentUser?.id;
-
-          const chatKey =
-            msg.receiverId === 'broadcast'
-              ? 'broadcast'
-              : msg.senderId === myId ? msg.receiverId : msg.senderId;
+          const chatKey = msg.receiverId === 'broadcast' ? 'broadcast'
+            : msg.senderId === myId ? msg.receiverId : msg.senderId;
 
           const isActiveChat = chatKey === state.activeChatId;
-
           const updatedPeers = { ...state.peers };
+
           if (updatedPeers[chatKey]) {
             updatedPeers[chatKey] = {
               ...updatedPeers[chatKey],
@@ -101,7 +107,8 @@ export const useChatStore = create<ChatState>()(
           }
 
           return { messages: [...state.messages, msg], peers: updatedPeers };
-        }),
+        });
+      },
 
       updateMessageStatus: (id, status) =>
         set((state) => ({
@@ -110,22 +117,17 @@ export const useChatStore = create<ChatState>()(
 
       addPeer: (peer) =>
         set((state) => {
-          // 1. Check if we already know this user by their ID OR their Public Key
           const existingPeerId = Object.keys(state.peers).find(
-            (key) =>
-              key === peer.id ||
-              (state.peers[key].publicKey === peer.publicKey && key !== 'broadcast')
+            (key) => key === peer.id || (state.peers[key].publicKey === peer.publicKey && key !== 'broadcast')
           );
-
           if (existingPeerId) {
-            // 2. If they exist, UPDATE the existing profile instead of creating a new one
             return {
               peers: {
                 ...state.peers,
                 [existingPeerId]: {
                   ...state.peers[existingPeerId],
-                  ...peer, // Pull in new network state (like isOnline)
-                  id: existingPeerId, // Force the ID to stay the same so chat history links up!
+                  ...peer,
+                  id: existingPeerId,
                   did: peer.did || state.peers[existingPeerId].did || `did:offlynk:${existingPeerId}`,
                   unreadCount: state.peers[existingPeerId].unreadCount || 0,
                   lastSeen: peer.isOnline ? Date.now() : (state.peers[existingPeerId].lastSeen || Date.now()),
@@ -133,31 +135,23 @@ export const useChatStore = create<ChatState>()(
               },
             };
           }
-
-          // 3. If it's a genuinely new person, add them normally
           return {
             peers: {
               ...state.peers,
-              [peer.id]: {
-                ...peer,
-                did: peer.did || `did:offlynk:${peer.id}`,
-                unreadCount: 0,
-                lastSeen: Date.now(),
-              },
+              [peer.id]: { ...peer, did: peer.did || `did:offlynk:${peer.id}`, unreadCount: 0, lastSeen: Date.now() },
             },
           };
         }),
 
       updatePeerStatus: (id, isOnline) =>
-        set((state) => {
-          if (!state.peers[id]) return state;
-          return {
-            peers: {
-              ...state.peers,
+        set((state) => ({
+          peers: {
+            ...state.peers,
+            ...(state.peers[id] && {
               [id]: { ...state.peers[id], isOnline, lastSeen: isOnline ? Date.now() : state.peers[id].lastSeen },
-            },
-          };
-        }),
+            }),
+          },
+        })),
 
       setActiveChat: (id) =>
         set((state) => {
@@ -175,21 +169,59 @@ export const useChatStore = create<ChatState>()(
       markRead: (peerId) =>
         set((state) => {
           if (!state.peers[peerId]) return state;
-          return {
-            peers: { ...state.peers, [peerId]: { ...state.peers[peerId], unreadCount: 0 } },
-          };
+          return { peers: { ...state.peers, [peerId]: { ...state.peers[peerId], unreadCount: 0 } } };
         }),
 
-      deleteMessageLocally: (id) =>
-        set((state) => ({ messages: state.messages.filter((m) => m.id !== id) })),
+      deleteMessageLocally: (id) => {
+        idbDel(`file_${id}`); // Clean up heavy storage
+        set((state) => ({ messages: state.messages.filter((m) => m.id !== id) }));
+      },
 
-      deleteMessageForEveryone: (id) =>
+      deleteMessageForEveryone: (id) => {
+        idbDel(`file_${id}`); // Clean up heavy storage
         set((state) => ({
           messages: state.messages.map((m) =>
-            m.id === id ? { ...m, content: '', deletedForEveryone: true, fileData: undefined } : m
+            m.id === id ? { ...m, content: '🚫 This message was deleted', deletedForEveryone: true, fileData: undefined } : m
           ),
-        })),
+        }));
+      },
+
+      // SILENT EXECUTOR for WebRTC incoming control packets
+      executeRemoteControlAction: (action, targetId) =>
+        set((state) => {
+          if (action === 'delete_message') {
+            idbDel(`file_${targetId}`);
+            return {
+              messages: state.messages.map((m) =>
+                m.id === targetId ? { ...m, content: '🚫 This message was deleted', deletedForEveryone: true, fileData: undefined } : m
+              ),
+            };
+          }
+          if (action === 'delivered') {
+            return {
+              messages: state.messages.map((m) => m.id === targetId ? { ...m, status: 'delivered' } : m),
+            };
+          }
+          if (action === 'read') {
+            return {
+              messages: state.messages.map((m) => m.id === targetId ? { ...m, status: 'read' } : m),
+            };
+          }
+          if (action === 'ack') {
+            return {
+              messages: state.messages.map((m) => m.id === targetId && m.status === 'sending' ? { ...m, status: 'sent' } : m),
+            };
+          }
+          return state;
+        }),
     }),
-    { name: 'offlynk-messages-v3' }
+    {
+      name: 'offlynk-messages-v4',
+      // Optional: Prevent saving non-essential states to localstorage
+      partialize: (state) => ({
+        messages: state.messages,
+        peers: state.peers
+      }),
+    }
   )
 );

@@ -1,43 +1,54 @@
 /**
  * meshNetwork.ts
  * Basic multi-hop message relay simulation.
- * When peer A wants to reach peer C through B, it wraps the message
- * with routing info and B relays it if C is known to B.
  */
 import { peersInstance } from "@/components/connection/PeerDiscovery";
+import { RelayEnvelope, NetworkPacket, ChatPacket, ControlPacket } from "@/types/network";
+// LRU Cache equivalent to prevent infinite loops in the mesh
+const seenRelays = new Set<string>();
+const MAX_SEEN_CACHE = 1000;
 
-export interface RelayEnvelope {
-  type: "relay";
-  target: string;       // Final destination peer ID
-  hops: string[];       // Peer IDs this has already passed through
-  payload: object;      // Original message payload
+function trackRelay(id: string) {
+  seenRelays.add(id);
+  if (seenRelays.size > MAX_SEEN_CACHE) {
+    const firstItem = seenRelays.keys().next().value;
+    if (firstItem) seenRelays.delete(firstItem);
+  }
 }
 
 /**
  * Attempt to relay a message to targetId via any connected peer.
- * Returns true if relay was dispatched.
  */
 export function relayMessage(
   targetId: string,
-  payload: object,
+  payload: ChatPacket | ControlPacket, // <-- FIX: Change this line from NetworkPacket
   selfId: string,
   maxHops = 3
 ): boolean {
+  const envelopeId = crypto.randomUUID();
+  trackRelay(envelopeId);
+
   const envelope: RelayEnvelope = {
     type: "relay",
+    messageId: envelopeId,
     target: targetId,
     hops: [selfId],
-    payload,
+    maxHops,
+    payload, // The red underline will now disappear!
   };
 
+
+  let dispatched = false;
   for (const [peerId, peer] of Object.entries(peersInstance)) {
-    if (peerId === targetId) continue; // Already direct
-    try {
-      peer.send(JSON.stringify(envelope));
-      return true;
-    } catch (err) { console.warn("Failed to relay message:", err); }
+    if (peerId === targetId) continue;
+    if (peer.connected) {
+      try {
+        peer.send(JSON.stringify(envelope));
+        dispatched = true;
+      } catch (err) { console.warn("Relay failed to", peerId, err); }
+    }
   }
-  return false;
+  return dispatched;
 }
 
 /**
@@ -46,16 +57,22 @@ export function relayMessage(
 export function handleRelay(
   envelope: RelayEnvelope,
   selfId: string,
-  onDeliver: (payload: object) => void
+  onDeliver: (payload: NetworkPacket) => void
 ) {
+  // 1. DEDUPLICATION: Drop immediately if we've seen this exact packet
+  if (seenRelays.has(envelope.messageId)) return;
+  trackRelay(envelope.messageId);
+
+  // 2. DELIVER: If it's meant for us
   if (envelope.target === selfId) {
     onDeliver(envelope.payload);
     return;
   }
 
-  if (envelope.hops.length >= 3) return; // Max hops exceeded
+  // 3. DROP: If max hops exceeded
+  if (envelope.hops.length >= envelope.maxHops) return;
 
-  // Forward to all peers not already in hops chain
+  // 4. FORWARD: Send to all connected peers not in the hop chain
   const updatedEnvelope: RelayEnvelope = {
     ...envelope,
     hops: [...envelope.hops, selfId],
@@ -63,8 +80,10 @@ export function handleRelay(
 
   for (const [peerId, peer] of Object.entries(peersInstance)) {
     if (updatedEnvelope.hops.includes(peerId)) continue;
-    try {
-      peer.send(JSON.stringify(updatedEnvelope));
-    } catch (err) { console.warn("Failed to forward relay message:", err); }
+    if (peer.connected) {
+      try {
+        peer.send(JSON.stringify(updatedEnvelope));
+      } catch (err) { console.warn("Failed to forward", peerId, err); }
+    }
   }
 }
