@@ -8,6 +8,7 @@ import { ConnectFlow } from "@/components/connection/ConnectFlow";
 import { OfflineIndicator } from "@/components/connection/OfflineIndicator";
 import { ProfilePage } from "@/components/profile/ProfilePage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
+import { StarredMessages } from "@/components/chat/StarredMessages";
 import { MessageSquare, Radio, ShieldAlert } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -16,10 +17,12 @@ type Panel = null | "profile" | "settings";
 export function AppShell() {
   const { activeChatId, setActiveChat } = useChatStore();
   const [panel, setPanel] = useState<Panel>(null);
+  const [starredOpen, setStarredOpen] = useState(false);
 
   return (
     <div className="flex h-[100dvh] w-full bg-background overflow-hidden text-foreground relative">
       <OfflineIndicator />
+      <StarredMessages open={starredOpen} onClose={() => setStarredOpen(false)} />
 
       {/* ── Sidebar ────────────────────────────────── */}
       <aside className={[
@@ -76,6 +79,7 @@ export function AppShell() {
         <ChatSidebar
           onOpenProfile={() => setPanel("profile")}
           onOpenSettings={() => setPanel("settings")}
+          onOpenStarred={() => setStarredOpen(true)}
         />
       </aside>
 

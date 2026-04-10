@@ -3,8 +3,8 @@
 import { useState } from "react";
 import {
   ArrowLeft, ChevronRight, ShieldCheck, Lock, Mail,
-  Bell, HelpCircle, MessageSquare, Trash2, Key, Eye,
-  LogOut, Moon, Sun, RefreshCw, Check, X, Loader2,
+  HelpCircle, MessageSquare, Trash2, Key, Eye,
+  LogOut, Moon, Sun, RefreshCw, Check, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,8 +15,9 @@ import { useUserStore } from "@/store/userStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { FeedbackForm } from "./FeedbackForm";
 import { PrivacySettings } from "./PrivacySettings";
+import { DangerZone } from "./DangerZone";
 
-type SubPage = null | "privacy" | "account" | "feedback" | "changeEmail" | "passkey";
+type SubPage = null | "privacy" | "feedback" | "changeEmail" | "passkey" | "dangerZone";
 
 interface Props {
   onBack?: () => void;
@@ -29,21 +30,20 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
   const { theme, setTheme } = useTheme();
 
   const [subPage, setSubPage] = useState<SubPage>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   /* ── Change email state ── */
-  const [newEmail, setNewEmail]   = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
-  const [emailMsg, setEmailMsg]   = useState("");
+  const [emailMsg, setEmailMsg] = useState("");
   const [emailError, setEmailError] = useState("");
 
   /* ── Passkey state ── */
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [passkeyMsg, setPasskeyMsg] = useState("");
 
-  /* ── Route sub-pages ── */
-  if (subPage === "privacy")   return <PrivacySettings onBack={() => setSubPage(null)} />;
-  if (subPage === "feedback")  return <FeedbackForm    onBack={() => setSubPage(null)} />;
+  /* ── Route standard sub-pages ── */
+  if (subPage === "privacy") return <PrivacySettings onBack={() => setSubPage(null)} />;
+  if (subPage === "feedback") return <FeedbackForm onBack={() => setSubPage(null)} />;
 
   /* ── Handlers ── */
   const handleSignOut = async () => {
@@ -51,15 +51,14 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
       const { getAuth, signOut: fbSignOut } = await import("firebase/auth");
       await fbSignOut(getAuth());
     } catch { /* offline – silent */ }
-    useUserStore.getState().clearUser();
-    signOut();
-  };
 
-  const handleDeleteAccount = () => {
-    handleSignOut();
+    useUserStore.getState().setCurrentUser(null as any);
+    useUserStore.getState().setKeys(null as any);
+    signOut();
+
     localStorage.clear();
     sessionStorage.clear();
-    window.location.reload();
+    window.location.href = "/";
   };
 
   const handleChangeEmail = async () => {
@@ -94,10 +93,10 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
         return;
       }
       setPasskeyMsg("Prompting your device for a passkey…");
-      
+
       const challenge = new Uint8Array(32);
       crypto.getRandomValues(challenge);
-      
+
       const userId = new Uint8Array(16);
       crypto.getRandomValues(userId);
 
@@ -140,7 +139,7 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
     toggle?: boolean; toggled?: boolean;
   }) => (
     <button
-      className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 active:bg-muted/50 transition-colors text-left ${danger ? "text-destructive" : ""}`}
+      className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 active:bg-muted/50 transition-colors text-left ${danger ? "text-destructive hover:bg-destructive/10" : ""}`}
       onClick={onClick}
     >
       <span className={`shrink-0 ${danger ? "text-destructive" : "text-primary"}`}>{icon}</span>
@@ -155,6 +154,23 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
       )}
     </button>
   );
+
+  /* ── Danger Zone Sub-Page ── */
+  if (subPage === "dangerZone") {
+    return (
+      <div className="flex flex-col h-full bg-background">
+        <div className="px-4 py-3 border-b border-border bg-card/90 backdrop-blur-sm flex items-center gap-3 shrink-0">
+          <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => setSubPage(null)}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <h2 className="font-semibold text-lg text-destructive">Delete Account</h2>
+        </div>
+        <div className="flex-1 p-4 overflow-y-auto">
+          <DangerZone />
+        </div>
+      </div>
+    );
+  }
 
   /* ── Change email inline panel ── */
   if (subPage === "changeEmail") {
@@ -268,7 +284,7 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-6">
         {/* Profile row */}
         <button
           onClick={onOpenProfile}
@@ -279,7 +295,7 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
               {email?.charAt(0)?.toUpperCase() || "?"}
             </span>
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 text-left">
             <p className="font-semibold truncate">{email || "Anonymous"}</p>
             <p className="text-xs text-muted-foreground">Tap to edit profile</p>
           </div>
@@ -288,10 +304,11 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
 
         {/* ACCOUNT */}
         <Section title="Account">
-          <Row icon={<Mail className="w-4 h-4" />}       label="Change Email"          onClick={() => { setNewEmail(email || ""); setSubPage("changeEmail"); }} />
-          <Row icon={<Key className="w-4 h-4" />}        label="Passkeys"              value="Not set" onClick={() => setSubPage("passkey")} />
-          <Row icon={<ShieldCheck className="w-4 h-4" />} label="Two-step Verification" onClick={() => {}} />
-          <Row icon={<Trash2 className="w-4 h-4" />}     label="Delete Account"        onClick={() => setShowDeleteConfirm(true)} danger />
+          <Row icon={<Mail className="w-4 h-4" />} label="Change Email" onClick={() => { setNewEmail(email || ""); setSubPage("changeEmail"); }} />
+          <Row icon={<Key className="w-4 h-4" />} label="Passkeys" value="Not set" onClick={() => setSubPage("passkey")} />
+          <Row icon={<ShieldCheck className="w-4 h-4" />} label="Two-step Verification" onClick={() => { }} />
+          {/* Routes to the Danger Zone subpage */}
+          <Row icon={<Trash2 className="w-4 h-4" />} label="Delete Account" onClick={() => setSubPage("dangerZone")} danger />
         </Section>
 
         {/* PRIVACY */}
@@ -314,51 +331,25 @@ export function SettingsPage({ onBack, onOpenProfile }: Props) {
 
         {/* HELP */}
         <Section title="Help">
-          <Row icon={<HelpCircle className="w-4 h-4" />}  label="Help Center"    onClick={() => {}} />
+          <Row icon={<HelpCircle className="w-4 h-4" />} label="Help Center" onClick={() => { }} />
           <Row icon={<MessageSquare className="w-4 h-4" />} label="Send Feedback" onClick={() => setSubPage("feedback")} />
-          <Row icon={<Lock className="w-4 h-4" />}        label="Privacy Policy"  onClick={() => {}} />
+          <Row icon={<Lock className="w-4 h-4" />} label="Privacy Policy" onClick={() => { }} />
         </Section>
 
         {/* Sign out */}
-        <div className="px-4 py-6">
+        <div className="px-4 py-6 mt-4">
           <Button
             variant="outline"
-            className="w-full h-12 border-destructive/30 text-destructive hover:bg-destructive/5 gap-2"
+            className="w-full h-12 border-destructive/30 text-destructive hover:bg-destructive/10 gap-2"
             onClick={handleSignOut}
           >
             <LogOut className="w-4 h-4" /> Sign Out
           </Button>
-          <p className="text-center text-xs text-muted-foreground mt-3 opacity-50">
+          <p className="text-center text-xs text-muted-foreground mt-4 opacity-50">
             OffLynk v1.0 · No servers · Open source
           </p>
         </div>
       </div>
-
-      {/* Delete confirm dialog */}
-      <AnimatePresence>
-        {showDeleteConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-            onClick={() => setShowDeleteConfirm(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9 }} animate={{ scale: 1 }}
-              className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="font-bold text-lg mb-2 text-destructive">Delete Account?</h3>
-              <p className="text-sm text-muted-foreground mb-6">
-                This will permanently delete your account, all messages, and encryption keys. This cannot be undone.
-              </p>
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
-                <Button variant="destructive" className="flex-1" onClick={handleDeleteAccount}>Delete</Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

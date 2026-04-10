@@ -357,3 +357,8 @@ body::before {
 .animate-ink {
   animation: ink-in 0.18s ease-out both;
 }
+
+/* ── Gooey Filter for Liquid Bubble Animations ──────────────── */
+.filter-gooey {
+  filter: url('#gooey');
+}

@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { useAuthStore } from "./authStore";
+import { useChatStore } from "./chatStore";
+import { clear as clearIndexedDB } from "idb-keyval";
 
 export interface User {
   id: string;
@@ -10,8 +13,12 @@ export interface User {
 interface UserState {
   currentUser: User | null;
   keys: { privateKey: string; publicKey: string } | null;
-  setCurrentUser: (user: User) => void;
-  setKeys: (keys: { privateKey: string; publicKey: string }) => void;
+
+  // THE FIX: Added `| null` to these function signatures so 
+  // TypeScript allows clearing the user state on logout/deletion.
+  setCurrentUser: (user: User | null) => void;
+  setKeys: (keys: { privateKey: string; publicKey: string } | null) => void;
+
   clearUser: () => void;
 }
 
@@ -53,3 +60,26 @@ export const useUserStore = create<UserState>()(
     }
   )
 );
+
+/**
+ * Utility function to completely eradicate local device data 
+ * during Account Deletion or deep Sign Out.
+ */
+export async function wipeLocalDeviceData() {
+  // 1. Trigger IndexedDB clear but DON'T 'await' it if it takes too long
+  // We let it run in the background while we clear the UI
+  clearIndexedDB().catch(e => console.warn("Cleanup background task:", e));
+
+  // 2. Immediate UI Reset
+  useAuthStore.getState().signOut();
+  useUserStore.getState().setCurrentUser(null);
+  useUserStore.getState().setKeys(null);
+
+  // 3. Nuke synchronous storage
+  localStorage.clear();
+  sessionStorage.clear();
+
+  // 4. Redirect immediately. 
+  // This is faster than window.location.reload() because it stops all pending JS scripts.
+  window.location.href = "/";
+}

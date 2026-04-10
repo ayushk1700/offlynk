@@ -2,24 +2,24 @@
 /**
  * EmailAuth.tsx
  * A professional, minimal authentication module supporting:
- * 1. Email + Password (Firebase Auth, with offline/demo fallback)
+ * 1. Email + Password with 6-Digit OTP Verification & Resend Cooldown
  * 2. Google & GitHub Sign-In (social)
  * 3. Secure RSA Key Generation on signup/login
- * 4. Paper-texture minimalistic UI
+ * 4. Paper-texture minimalistic UI with Ultra Dark support
  */
-import React, { useState, useRef, forwardRef } from "react";
+import React, { useState, useRef, forwardRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Mail, Lock, Eye, EyeOff, Cpu,
   Loader2, Github, Shield,
-  AlertCircle, Sparkles,
+  AlertCircle, Sparkles, ArrowRight, RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { useUserStore } from "@/store/userStore";
 import { generateKeyPair, exportPublicKey, exportPrivateKey } from "@/lib/encryption/crypto";
 import { createProfile } from "@/lib/firebase/profile";
-import { generateId } from "@/lib/utils/helpers";
+import { cn, generateId } from "@/lib/utils/helpers";
 import { isFirebaseConfigured, getFirebaseAuth } from "@/lib/firebase";
 
 /* ── Social Provider Icons ───────────────────────────────────── */
@@ -49,8 +49,8 @@ const FloatingInput = forwardRef<HTMLInputElement, FloatingInputProps>(
       <div className="relative group">
         <label
           className={`absolute left-4 pointer-events-none transition-all duration-200 z-10 ${active
-              ? "top-1.5 text-[10px] font-semibold text-primary/70"
-              : "top-1/2 -translate-y-1/2 text-sm text-muted-foreground"
+            ? "top-1.5 text-[10px] font-semibold text-primary/70"
+            : "top-1/2 -translate-y-1/2 text-sm text-muted-foreground"
             }`}
         >
           {label}
@@ -58,14 +58,8 @@ const FloatingInput = forwardRef<HTMLInputElement, FloatingInputProps>(
         <input
           ref={ref}
           value={value}
-          onFocus={(e) => {
-            setFocused(true);
-            onFocus?.(e);
-          }}
-          onBlur={(e) => {
-            setFocused(false);
-            onBlur?.(e);
-          }}
+          onFocus={(e) => { setFocused(true); onFocus?.(e); }}
+          onBlur={(e) => { setFocused(false); onBlur?.(e); }}
           className={`w-full h-14 pt-5 pb-1 px-4 rounded-2xl bg-card border transition-all outline-none text-sm text-foreground
             ${focused ? "border-primary/60 shadow-[0_0_0_3px_hsl(var(--primary)/0.08)]" : "border-border hover:border-border/80"}
             ${rightEl ? "pr-12" : ""}
@@ -86,7 +80,7 @@ FloatingInput.displayName = "FloatingInput";
 
 /* ── Main Auth Component ─────────────────────────────────────── */
 type AuthTab = "login" | "signup";
-type AuthStep = "auth" | "generating";
+type AuthStep = "auth" | "verify" | "generating";
 type SocialProvider = "google" | "github";
 
 interface Props {
@@ -105,6 +99,10 @@ export function EmailAuth({ onComplete }: Props) {
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
 
+  // OTP State & Timer
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [resendTimer, setResendTimer] = useState(60);
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const nameRef = useRef<HTMLInputElement>(null);
 
   const { setAuth } = useAuthStore();
@@ -114,6 +112,15 @@ export function EmailAuth({ onComplete }: Props) {
   const clearError = () => setError("");
   const trimEmail = (v: string) => v.trim().toLowerCase();
   const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+
+  /* ── Timer Logic ── */
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (step === "verify" && resendTimer > 0) {
+      interval = setInterval(() => setResendTimer((prev) => prev - 1), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [step, resendTimer]);
 
   /* ── Core Key Generation & Profile Save ── */
   const generateAndSaveKeys = async (uid: string, emailAddr: string, name: string) => {
@@ -149,8 +156,8 @@ export function EmailAuth({ onComplete }: Props) {
     }
   };
 
-  /* ── Email / Password Auth Flow ── */
-  const handleEmailAuth = async () => {
+  /* ── Step 1: Pre-Auth Validation & Sending Code ── */
+  const handleInitialSubmit = async () => {
     clearError();
     const em = trimEmail(email);
 
@@ -159,49 +166,130 @@ export function EmailAuth({ onComplete }: Props) {
     if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
 
     setLoading(true);
-    try {
-      const auth = await getFirebaseAuth();
 
+    if (tab === "signup") {
+      try {
+        // ACTUAL API CALL TO SEND OTP
+        const response = await fetch('/api/send-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: em, name: displayName })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to send verification code");
+
+        setResendTimer(60); // Start 60-second cooldown
+        setStep("verify");
+        setTimeout(() => otpRefs.current[0]?.focus(), 300);
+      } catch (err: any) {
+        setError(err.message || "Failed to send verification code. Please check your network.");
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      executeFirebaseSignIn(em);
+    }
+  };
+
+  /* ── Step 1.5: Resend OTP Logic ── */
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimEmail(email), name: displayName })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to resend verification code");
+
+      setResendTimer(60); // Reset cooldown
+      setOtp(["", "", "", "", "", ""]); // Clear previous input
+      setTimeout(() => otpRefs.current[0]?.focus(), 300);
+    } catch (err: any) {
+      setError(err.message || "Failed to resend code.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ── Step 2: Verify Code & Create Account ── */
+  const handleVerifyCode = async () => {
+    const code = otp.join("");
+    if (code.length < 6) {
+      setError("Please enter the complete 6-digit code.");
+      return;
+    }
+
+    setLoading(true);
+    clearError();
+
+    try {
+      // ACTUAL API CALL TO VERIFY OTP
+      const response = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimEmail(email), code })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Invalid verification code");
+
+      const auth = await getFirebaseAuth();
+      const em = trimEmail(email);
+
+      // Create Firebase user after successful OTP verification
       if (!auth || !isFirebaseConfigured) {
-        // Fallback: Local Demo Mode
         const uid = generateId() + generateId().slice(0, 8);
         await generateAndSaveKeys(uid, em, displayName.trim() || "Demo User");
         return;
       }
 
-      const { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } = await import("firebase/auth");
+      const { createUserWithEmailAndPassword, updateProfile } = await import("firebase/auth");
+      const cred = await createUserWithEmailAndPassword(auth, em, password);
+      await updateProfile(cred.user, { displayName: displayName.trim() });
 
-      if (tab === "signup") {
-        let cred;
-        try {
-          cred = await createUserWithEmailAndPassword(auth, em, password);
-          await updateProfile(cred.user, { displayName: displayName.trim() });
-        } catch (e: any) {
-          if (e?.code === "auth/email-already-in-use") {
-            setError("Account already exists. Try logging in instead.");
-            setTab("login");
-            return;
-          }
-          throw e;
-        }
-        await generateAndSaveKeys(cred.user.uid, em, displayName.trim());
+      // Proceed to App
+      await generateAndSaveKeys(cred.user.uid, em, displayName.trim());
 
-      } else {
-        let cred;
-        try {
-          cred = await signInWithEmailAndPassword(auth, em, password);
-        } catch (e: any) {
-          if (e?.code === "auth/user-not-found" || e?.code === "auth/wrong-password" || e?.code === "auth/invalid-credential") {
-            setError("Incorrect email or password.");
-            return;
-          }
-          throw e;
-        }
-        await generateAndSaveKeys(cred.user.uid, em, cred.user.displayName || "Unknown User");
-      }
     } catch (e: any) {
-      console.error("Auth error:", e);
-      setError(e?.message || "Authentication failed. Please try again.");
+      if (e?.code === "auth/email-already-in-use") {
+        setError("Account already exists. Try logging in instead.");
+        setStep("auth");
+        setTab("login");
+      } else {
+        setError(e?.message || "Invalid verification code or network error.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ── Direct Firebase Login ── */
+  const executeFirebaseSignIn = async (em: string) => {
+    try {
+      const auth = await getFirebaseAuth();
+      if (!auth || !isFirebaseConfigured) {
+        const uid = generateId() + generateId().slice(0, 8);
+        await generateAndSaveKeys(uid, em, "Demo User");
+        return;
+      }
+
+      const { signInWithEmailAndPassword } = await import("firebase/auth");
+      const cred = await signInWithEmailAndPassword(auth, em, password);
+      await generateAndSaveKeys(cred.user.uid, em, cred.user.displayName || "Unknown User");
+    } catch (e: any) {
+      if (e?.code === "auth/user-not-found" || e?.code === "auth/wrong-password" || e?.code === "auth/invalid-credential") {
+        setError("Incorrect email or password.");
+      } else {
+        setError(e?.message || "Authentication failed.");
+      }
     } finally {
       setLoading(false);
     }
@@ -236,8 +324,29 @@ export function EmailAuth({ onComplete }: Props) {
     }
   };
 
+  /* ── OTP Input Handlers ── */
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    const newOtp = [...otp];
+    newOtp[index] = value.substring(value.length - 1);
+    setOtp(newOtp);
+
+    if (value && index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
+    if (e.key === "Enter" && index === 5 && otp.every(v => v !== "")) {
+      handleVerifyCode();
+    }
+  };
+
   const onAuthKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleEmailAuth();
+    if (e.key === "Enter") handleInitialSubmit();
   };
 
   /* ── Animations ── */
@@ -248,8 +357,7 @@ export function EmailAuth({ onComplete }: Props) {
   };
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-background paper-texture p-4 relative overflow-hidden">
-      {/* Subtle Ambient Background */}
+    <div className="min-h-[100dvh] flex items-center justify-center bg-background paper-texture p-4 relative overflow-hidden transition-colors duration-300">
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
         <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
         <div className="absolute -bottom-40 -right-40 w-80 h-80 rounded-full bg-primary/4 blur-3xl" />
@@ -264,33 +372,31 @@ export function EmailAuth({ onComplete }: Props) {
             initial="hidden" animate="visible" exit="exit"
             className="w-full max-w-sm z-10"
           >
-            {/* Header & Logo */}
             <div className="text-center mb-8">
               <div className="relative inline-flex mb-4">
                 <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
                   <Lock className="w-7 h-7 text-primary-foreground" />
                 </div>
                 <motion.div
-                  className="absolute -top-1 -right-1 w-5 h-5 bg-card border border-border rounded-full flex items-center justify-center shadow-sm"
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-card border border-themeBorderSolid rounded-full flex items-center justify-center shadow-sm"
                   animate={{ scale: [1, 1.15, 1] }}
                   transition={{ repeat: Infinity, duration: 2.4, ease: "easeInOut" }}
                 >
-                  <Sparkles className="w-2.5 h-2.5 text-primary/70" />
+                  <Sparkles className="w-2.5 h-2.5 text-primary/80" />
                 </motion.div>
               </div>
               <h1 className="text-2xl font-bold tracking-tight mb-1">OffLynk</h1>
               <p className="text-sm text-muted-foreground">Private. Encrypted. Yours.</p>
             </div>
 
-            {/* Login / Signup Toggle */}
             <div className="flex bg-muted/50 border border-border/50 rounded-2xl p-1 mb-6">
               {(["login", "signup"] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => { setTab(t); clearError(); }}
                   className={`flex-1 py-2 text-sm font-semibold rounded-xl transition-all ${tab === t
-                      ? "bg-card text-foreground shadow-sm border border-border/50"
-                      : "text-muted-foreground hover:text-foreground"
+                    ? "bg-card text-foreground shadow-sm border border-border/50"
+                    : "text-muted-foreground hover:text-foreground"
                     }`}
                 >
                   {t === "login" ? "Sign In" : "Create Account"}
@@ -298,7 +404,6 @@ export function EmailAuth({ onComplete }: Props) {
               ))}
             </div>
 
-            {/* Input Fields */}
             <div className="space-y-3 mb-4">
               <AnimatePresence initial={false}>
                 {tab === "signup" && (
@@ -338,11 +443,8 @@ export function EmailAuth({ onComplete }: Props) {
                 rightEl={
                   <button
                     type="button"
-                    tabIndex={-1} // Prevent tabbing to the eye icon
-                    onPointerDown={(e) => {
-                      e.preventDefault(); // Prevents input from losing focus
-                      setShowPass(!showPass);
-                    }}
+                    tabIndex={-1}
+                    onPointerDown={(e) => { e.preventDefault(); setShowPass(!showPass); }}
                     className="text-muted-foreground hover:text-foreground transition-colors p-2"
                   >
                     {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -351,15 +453,11 @@ export function EmailAuth({ onComplete }: Props) {
               />
             </div>
 
-            {/* Error Message */}
             <AnimatePresence>
               {error && (
                 <motion.div
-                  key="err"
-                  initial={{ opacity: 0, y: -4, height: 0 }}
-                  animate={{ opacity: 1, y: 0, height: "auto" }}
-                  exit={{ opacity: 0, y: -4, height: 0 }}
-                  className="flex items-start gap-2 text-sm text-destructive bg-destructive/8 border border-destructive/20 rounded-xl px-3 py-2.5 mb-3 overflow-hidden"
+                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                  className="flex items-center gap-2 text-sm text-destructive bg-destructive/8 border border-destructive/20 rounded-xl px-3 py-2.5 mb-3"
                 >
                   <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                   <span>{error}</span>
@@ -367,29 +465,14 @@ export function EmailAuth({ onComplete }: Props) {
               )}
             </AnimatePresence>
 
-            {/* Submit Button */}
             <Button
-              className="w-full h-12 rounded-2xl text-base font-semibold mb-4 relative overflow-hidden group"
-              onClick={handleEmailAuth}
+              className="w-full h-12 rounded-2xl text-base font-semibold mb-4"
+              onClick={handleInitialSubmit}
               disabled={loading || !!socialLoading}
             >
-              {loading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <Mail className="w-5 h-5 mr-2" />
-                  {tab === "login" ? "Sign In" : "Create Account"}
-                  <motion.div
-                    className="absolute inset-0 bg-white/5"
-                    initial={{ x: "-100%" }}
-                    whileHover={{ x: "100%" }}
-                    transition={{ duration: 0.5 }}
-                  />
-                </>
-              )}
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <> <Mail className="w-5 h-5 mr-2" /> {tab === "login" ? "Sign In" : "Verify Email & Create"} </>}
             </Button>
 
-            {/* Social Auth Dividers */}
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 h-px bg-border/50" />
               <span className="text-xs text-muted-foreground font-medium">or continue with</span>
@@ -403,8 +486,7 @@ export function EmailAuth({ onComplete }: Props) {
                 disabled={loading || !!socialLoading}
                 className="flex items-center justify-center gap-2.5 h-12 bg-card border border-border rounded-2xl text-sm font-semibold text-foreground hover:bg-muted/40 transition-all disabled:opacity-50 shadow-sm"
               >
-                {socialLoading === "google" ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
-                Google
+                {socialLoading === "google" ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />} Google
               </motion.button>
 
               <motion.button
@@ -413,20 +495,89 @@ export function EmailAuth({ onComplete }: Props) {
                 disabled={loading || !!socialLoading}
                 className="flex items-center justify-center gap-2.5 h-12 bg-card border border-border rounded-2xl text-sm font-semibold text-foreground hover:bg-muted/40 transition-all disabled:opacity-50 shadow-sm"
               >
-                {socialLoading === "github" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Github className="w-4 h-4" />}
-                GitHub
+                {socialLoading === "github" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Github className="w-4 h-4" />} GitHub
               </motion.button>
-            </div>
-
-            {/* Security Badge */}
-            <div className="flex items-center justify-center gap-1.5 mt-2 text-[11px] text-muted-foreground/60">
-              <Shield className="w-3 h-3" />
-              <span>End-to-end encrypted · Keys stay on device</span>
             </div>
           </motion.div>
         )}
 
-        {/* ── Phase 2: Key Generation State ── */}
+        {/* ── Phase 2: OTP Verification Step ── */}
+        {step === "verify" && (
+          <motion.div
+            key="verify"
+            variants={cardVariants}
+            initial="hidden" animate="visible" exit="exit"
+            className="w-full max-w-sm z-10 flex flex-col items-center"
+          >
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4 border border-primary/20">
+                <Mail className="w-7 h-7 text-primary" />
+              </div>
+              <h2 className="text-2xl font-bold tracking-tight mb-2">Check your email</h2>
+              <p className="text-sm text-muted-foreground px-4">
+                We've sent a 6-digit verification code to <br />
+                <span className="font-semibold text-foreground">{email}</span>
+              </p>
+            </div>
+
+            <div className="flex justify-between w-full gap-2 mb-6">
+              {otp.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={(el) => { otpRefs.current[i] = el; }}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleOtpChange(i, e.target.value)}
+                  onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                  className="w-[3.25rem] h-14 text-center text-xl font-bold rounded-xl bg-card border border-border focus:border-primary/60 focus:shadow-[0_0_0_3px_hsl(var(--primary)/0.08)] outline-none transition-all text-foreground"
+                />
+              ))}
+            </div>
+
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                  className="flex items-center justify-center w-full gap-1.5 text-sm text-destructive mb-4"
+                >
+                  <AlertCircle className="w-4 h-4" /> {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <Button
+              className="w-full h-12 rounded-2xl text-base font-semibold mb-4"
+              onClick={handleVerifyCode}
+              disabled={loading || otp.join("").length < 6}
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Verify Code <ArrowRight className="w-4 h-4 ml-2" /></>}
+            </Button>
+
+            {/* Resend OTP Logic */}
+            <div className="flex flex-col items-center w-full gap-3 mt-2">
+              <button
+                onClick={handleResendOtp}
+                disabled={resendTimer > 0 || loading}
+                className="flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:hover:text-muted-foreground"
+              >
+                <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+                {resendTimer > 0 ? `Resend code in ${resendTimer}s` : "Resend Verification Code"}
+              </button>
+
+              <button
+                onClick={() => { setStep("auth"); clearError(); setOtp(["", "", "", "", "", ""]); }}
+                className="text-xs text-muted-foreground/80 hover:text-foreground transition-colors underline underline-offset-2"
+                disabled={loading}
+              >
+                Incorrect email? Go back
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── Phase 3: Key Generation State ── */}
         {step === "generating" && (
           <motion.div
             key="gen"
@@ -445,24 +596,12 @@ export function EmailAuth({ onComplete }: Props) {
                 <Cpu className="w-8 h-8 text-primary/70" />
               </div>
             </div>
-
             <h2 className="text-xl font-bold mb-2">Securing Connection</h2>
             <p className="text-sm text-muted-foreground text-center max-w-xs leading-relaxed">
               Generating your private RSA key pair for end-to-end encryption.
               <br />
               <span className="text-xs opacity-60 mt-1 inline-block">This only takes a moment.</span>
             </p>
-
-            <div className="flex gap-1.5 mt-8">
-              {[0, 1, 2].map((i) => (
-                <motion.span
-                  key={i}
-                  className="w-2 h-2 rounded-full bg-primary/40"
-                  animate={{ opacity: [0.3, 1, 0.3] }}
-                  transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-                />
-              ))}
-            </div>
           </motion.div>
         )}
       </AnimatePresence>

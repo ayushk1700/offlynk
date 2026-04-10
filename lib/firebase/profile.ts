@@ -4,6 +4,9 @@
  */
 import { getFirebaseDb, getFirebaseStorage } from "@/lib/firebase";
 import type { Timestamp } from "firebase/firestore";
+import { getFirebaseAuth } from "@/lib/firebase";
+import { doc, deleteDoc } from "firebase/firestore";
+import { deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 
 export interface UserProfile {
   uid: string;
@@ -47,6 +50,7 @@ export async function createProfile(uid: string, data: Partial<UserProfile>) {
   }, { merge: true });
 }
 
+
 export async function getProfile(uid: string): Promise<UserProfile | null> {
   const db = await getFirebaseDb();
   if (!db) return null;
@@ -81,3 +85,5 @@ export async function saveFeedback(uid: string, message: string, category: strin
     appVersion: "1.0.0",
   });
 }
+
+export { deleteAccountFromCloud } from "./deleteAccount";

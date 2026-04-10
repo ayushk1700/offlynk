@@ -174,6 +174,11 @@ export default function ChatHeader({ onSOSClick }: Props) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <p className="font-semibold text-sm text-foreground truncate leading-tight">{peer.name}</p>
+            {peer.hops && peer.hops > 1 && (
+              <span className="flex items-center gap-0.5 text-[9px] font-bold text-blue-500 bg-blue-500/10 px-1 rounded ring-1 ring-blue-500/20">
+                <Zap className="w-2.5 h-2.5 fill-blue-500" /> {peer.hops}h
+              </span>
+            )}
             {isPinned && <Pin className="w-3 h-3 text-muted-foreground shrink-0" />}
             {isSilent && <BellOff className="w-3 h-3 text-muted-foreground shrink-0" />}
             {sdMins > 0 && (

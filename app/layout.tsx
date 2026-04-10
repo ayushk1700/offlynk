@@ -42,6 +42,21 @@ export default function RootLayout({
       <body style={{ fontFamily: "var(--font-inter, ui-sans-serif, system-ui, sans-serif)" }}>
         <ThemeProvider defaultTheme="dark" enableSystem>
           {children}
+          {/* Global SVG Filters for Animations */}
+          <svg style={{ visibility: "hidden", position: "absolute", width: 0, height: 0 }}>
+            <defs>
+              <filter id="gooey">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+                <feColorMatrix
+                  in="blur"
+                  mode="matrix"
+                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7"
+                  result="gooey"
+                />
+                <feComposite in="SourceGraphic" in2="gooey" operator="atop" />
+              </filter>
+            </defs>
+          </svg>
         </ThemeProvider>
       </body>
     </html>

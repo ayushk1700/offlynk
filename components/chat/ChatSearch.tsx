@@ -1,19 +1,34 @@
 "use client";
 
 import { useChatStore } from "@/store";
-import { useState } from "react";
-import { Search, X } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Search, X, MessageSquare, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 export default function ChatSearch() {
   const [query, setQuery] = useState("");
-  const { peers, setActiveChat } = useChatStore();
+  const { peers, messages, setActiveChat } = useChatStore();
 
-  const results = query.trim()
-    ? Object.values(peers).filter((p) =>
-        p.name.toLowerCase().includes(query.toLowerCase())
-      )
-    : [];
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+
+    const peerMatches = Object.values(peers)
+        .filter((p) => p.name.toLowerCase().includes(q))
+        .map(p => ({ type: 'peer' as const, data: p }));
+
+    const messageMatches: { type: 'message', data: any, peerId: string }[] = [];
+    Object.entries(messages).forEach(([peerId, thread]) => {
+        thread.forEach(msg => {
+            if (msg.content.toLowerCase().includes(q) && !msg.isDeleted) {
+                messageMatches.push({ type: 'message', data: msg, peerId });
+            }
+        });
+    });
+
+    // Return limited combined results
+    return [...peerMatches, ...messageMatches.slice(0, 50)];
+  }, [query, peers, messages]);
 
   return (
     <div className="relative p-2">
@@ -21,7 +36,7 @@ export default function ChatSearch() {
         <Search className="absolute left-3 w-4 h-4 text-muted-foreground pointer-events-none" />
         <Input
           className="pl-9 pr-8 bg-muted/60 border-transparent focus-visible:border-border text-sm"
-          placeholder="Search peers…"
+          placeholder="Search peers or messages…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -35,20 +50,34 @@ export default function ChatSearch() {
         )}
       </div>
       {results.length > 0 && (
-        <div className="absolute z-20 top-full left-2 right-2 bg-card border border-border rounded-md shadow-lg mt-1 overflow-hidden">
-          {results.map((p) => (
+        <div className="absolute z-[100] top-full left-2 right-2 bg-card/95 backdrop-blur-xl border border-border/50 rounded-xl shadow-2xl mt-2 overflow-hidden max-h-[400px] overflow-y-auto animate-in slide-in-from-top-2">
+          {results.map((res, i) => (
             <button
-              key={p.id}
+              key={`${res.type}-${i}`}
               onClick={() => {
-                setActiveChat(p.id);
+                const targetId = res.type === 'peer' ? res.data.id : res.peerId;
+                setActiveChat(targetId);
                 setQuery("");
               }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/50 transition-colors text-left border-b border-border/30 last:border-0"
             >
-              <span className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-xs font-bold shrink-0">
-                {p.name.charAt(0).toUpperCase()}
-              </span>
-              {p.name}
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                {res.type === 'peer' ? (
+                    <User className="w-4 h-4 text-primary" />
+                ) : (
+                    <MessageSquare className="w-4 h-4 text-primary" />
+                )}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-foreground truncate">
+                    {res.type === 'peer' ? res.data.name : peers[res.peerId]?.name || 'Unknown'}
+                </span>
+                {res.type === 'message' && (
+                    <span className="text-xs text-muted-foreground truncate italic">
+                        "{res.data.content}"
+                    </span>
+                )}
+              </div>
             </button>
           ))}
         </div>

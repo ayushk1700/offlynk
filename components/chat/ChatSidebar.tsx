@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useChatStore, useUserStore } from "@/store";
 import { useConnectionStore } from "@/store/connectionStore";
 import { useFeatureStore } from "@/store/featureStore";
@@ -7,9 +8,10 @@ import ChatSearch from "@/components/chat/ChatSearch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
-  PlusCircle, Radio, ShieldAlert, Cpu, Zap,
-  Sun, Moon, Pin, BellOff, Timer, RefreshCw, Wifi,
+  PlusCircle, Radio, ShieldAlert, Cpu, Zap, Users,
+  Sun, Moon, Pin, BellOff, Timer, RefreshCw, Wifi, Star,
 } from "lucide-react";
+import { CreateGroupModal } from "./CreateGroupModal";
 import { formatTime } from "@/lib/utils/helpers";
 import { useTheme } from "@/components/layout/ThemeToggle";
 
@@ -18,9 +20,10 @@ import { Settings, User } from "lucide-react";
 interface SidebarProps {
   onOpenProfile?: () => void;
   onOpenSettings?: () => void;
+  onOpenStarred?: () => void;
 }
 
-export default function ChatSidebar({ onOpenProfile, onOpenSettings }: SidebarProps) {
+export default function ChatSidebar({ onOpenProfile, onOpenSettings, onOpenStarred }: SidebarProps) {
   const { peers, activeChatId, setActiveChat, messages } = useChatStore();
   const { currentUser } = useUserStore();
   const { setScanning } = useConnectionStore();
@@ -30,13 +33,11 @@ export default function ChatSidebar({ onOpenProfile, onOpenSettings }: SidebarPr
     autoReconnect, setAutoReconnect,
   } = useFeatureStore();
 
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+
   const getLastMessage = (peerId: string) => {
-    const msgs = messages.filter(
-      (m) =>
-        m.senderId === peerId || m.receiverId === peerId ||
-        (peerId === "broadcast" && m.receiverId === "broadcast")
-    );
-    return msgs[msgs.length - 1] ?? null;
+    const thread = messages[peerId] || [];
+    return thread[thread.length - 1] ?? null;
   };
 
   // Sort: pinned first, then by lastSeen
@@ -83,6 +84,22 @@ export default function ChatSidebar({ onOpenProfile, onOpenSettings }: SidebarPr
           <Button
             variant="ghost" size="icon"
             className="w-8 h-8 text-muted-foreground hover:text-foreground"
+            onClick={onOpenStarred}
+            title="Starred Messages"
+          >
+            <Star className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost" size="icon"
+            className="w-8 h-8 text-muted-foreground hover:text-foreground"
+            onClick={() => setCreateGroupOpen(true)}
+            title="Create Group"
+          >
+            <Users className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost" size="icon"
+            className="w-8 h-8 text-muted-foreground hover:text-foreground"
             onClick={onOpenSettings}
             title="Settings"
           >
@@ -101,6 +118,7 @@ export default function ChatSidebar({ onOpenProfile, onOpenSettings }: SidebarPr
 
       {/* ── Search ──────────────────────────────────── */}
       <ChatSearch />
+      <CreateGroupModal open={createGroupOpen} onClose={() => setCreateGroupOpen(false)} />
 
       {/* ── Status + toggles ────────────────────────── */}
       <div className="px-3 pb-2 space-y-1.5">
@@ -198,7 +216,7 @@ export default function ChatSidebar({ onOpenProfile, onOpenSettings }: SidebarPr
                       <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${peer.isOnline ? "bg-primary" : "bg-muted-foreground/30"}`} />
                     )}
                     <span className="truncate">
-                      {lastMsg?.deletedForEveryone
+                      {lastMsg?.isDeleted
                         ? "🚫 This message was deleted"
                         : lastMsg
                         ? lastMsg.content.slice(0, 45)

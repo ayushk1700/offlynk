@@ -1,7 +1,7 @@
 // types/network.ts
-import { Message } from '@/store/chatStore';
+import { LocalMessage } from '@/store/chatStore';
 
-export type ControlAction = 'delete_message' | 'typing' | 'delivered' | 'read' | 'ack'; // Make sure to include 'ack' as well!
+export type ControlAction = 'delete_message' | 'typing' | 'delivered' | 'read' | 'ack' | 'edit' | 'reaction' | 'view_once';
 
 export interface BasePacket {
     id: string; // Unique packet ID
@@ -10,14 +10,19 @@ export interface BasePacket {
 
 export interface ChatPacket extends BasePacket {
     type: 'chat';
-    message: Message;
+    message: LocalMessage;
 }
 
 export interface ControlPacket extends BasePacket {
     type: 'control';
     action: ControlAction;
     targetId: string; // The ID of the message to act upon
-    senderId?: string; // Optional: helps identify who sent the control packet
+    senderId?: string; // Who sent the control packet
+    metadata?: {
+        content?: string; // For edit
+        emoji?: string;   // For reaction
+        isRemoving?: boolean; // For reaction toggle
+    };
 }
 
 export interface RelayEnvelope {

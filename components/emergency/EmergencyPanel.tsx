@@ -55,6 +55,7 @@ export function EmergencyPanel({ open, onClose }: Props) {
     addMessage({
       id, senderId: currentUser.id, receiverId: "broadcast",
       content, timestamp: ts, status: "sent", type: "text",
+      isDeleted: false, isEdited: false,
     });
 
     // Send via BroadcastChannel to same-origin tabs

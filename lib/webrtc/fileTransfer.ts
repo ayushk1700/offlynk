@@ -83,15 +83,17 @@ export async function sendFile(
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
   // START packet
-  const meta: TransferMeta = {
-    id: transferId,
+  send(JSON.stringify({ 
+    type: "file-start", 
+    id: crypto.randomUUID(),
+    senderId,
+    timestamp: Date.now(),
+    fileId: transferId, 
     name: file.name,
     size: file.size,
     mimeType: file.type || "application/octet-stream",
-    totalChunks,
-    senderId,
-  };
-  send(JSON.stringify({ type: "file-start", ...meta, keyB64 }));
+    keyB64 
+  }));
 
   // CHUNK packets
   for (let i = 0; i < totalChunks; i++) {
@@ -104,7 +106,17 @@ export async function sendFile(
     const ivB64 = btoa(String.fromCharCode(...iv));
     const cipherB64 = btoa(String.fromCharCode(...new Uint8Array(cipher)));
 
-    send(JSON.stringify({ type: "file-chunk", id: transferId, index: i, total: totalChunks, ivB64, cipherB64 }));
+    send(JSON.stringify({ 
+        type: "file-chunk", 
+        id: crypto.randomUUID(),
+        senderId,
+        timestamp: Date.now(),
+        fileId: transferId, 
+        chunkIndex: i, 
+        totalChunks: totalChunks, 
+        ivB64, 
+        cipherB64 
+    }));
     onProgress?.(Math.round(((i + 1) / totalChunks) * 100));
 
     // Yield to event loop every 16 chunks to avoid blocking
@@ -112,30 +124,39 @@ export async function sendFile(
   }
 
   // END packet
-  send(JSON.stringify({ type: "file-end", id: transferId }));
+  // Note: We use file-ack or just implicit end. I'll stick to a simple end for now.
+  send(JSON.stringify({ 
+    type: "file-end", 
+    id: crypto.randomUUID(), 
+    senderId,
+    timestamp: Date.now(),
+    fileId: transferId 
+  }));
   return { keyB64 };
 }
+
+import { FileChunkMessage, FileMetaMessage } from "./dataChannel";
 
 /* ── RECEIVER ────────────────────────────────────────────── */
 // Global map: transferId → IncomingTransfer
 export const incomingTransfers = new Map<string, IncomingTransfer>();
 
 export async function handleFileStart(
-  payload: Record<string, unknown>,
+  payload: FileMetaMessage & { keyB64: string },
   callbacks: {
     onProgress?: (id: string, pct: number) => void;
     onDone?: (id: string, blob: Blob, meta: TransferMeta) => void;
   }
 ) {
   const meta: TransferMeta = {
-    id: payload.id as string,
-    name: payload.name as string,
-    size: payload.size as number,
-    mimeType: payload.mimeType as string,
-    totalChunks: payload.totalChunks as number,
-    senderId: payload.senderId as string,
+    id: payload.fileId,
+    name: payload.name,
+    size: payload.size,
+    mimeType: payload.mimeType,
+    totalChunks: Math.ceil(payload.size / CHUNK_SIZE), // Recalculate or add to meta
+    senderId: payload.senderId,
   };
-  const key = await importKey(payload.keyB64 as string);
+  const key = await importKey(payload.keyB64);
 
   incomingTransfers.set(meta.id, {
     meta,
@@ -147,16 +168,15 @@ export async function handleFileStart(
   });
 }
 
-export async function handleFileChunk(payload: Record<string, unknown>) {
-  const id = payload.id as string;
-  const transfer = incomingTransfers.get(id);
+export async function handleFileChunk(payload: FileChunkMessage) {
+  const transfer = incomingTransfers.get(payload.fileId);
   if (!transfer) return;
 
-  const iv = Uint8Array.from(atob(payload.ivB64 as string), (c) => c.charCodeAt(0));
-  const cipherBytes = Uint8Array.from(atob(payload.cipherB64 as string), (c) => c.charCodeAt(0));
+  const iv = Uint8Array.from(atob(payload.ivB64), (c) => c.charCodeAt(0));
+  const cipherBytes = Uint8Array.from(atob(payload.cipherB64), (c) => c.charCodeAt(0));
   const plain = await decryptChunk(transfer.key, cipherBytes.buffer, iv);
 
-  transfer.chunks.set(payload.index as number, new Uint8Array(plain));
+  transfer.chunks.set(payload.chunkIndex, new Uint8Array(plain));
   transfer.receivedCount++;
   transfer.onProgress?.(Math.round((transfer.receivedCount / transfer.meta.totalChunks) * 100));
 }

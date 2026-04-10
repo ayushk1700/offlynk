@@ -25,6 +25,8 @@ interface Props {
   onBack?: () => void;
 }
 
+
+
 export function ProfilePage({ onBack }: Props) {
   const { uid, phone, email, profile, setProfile, setAuth } = useAuthStore();
   const { currentUser } = useUserStore();
@@ -133,6 +135,7 @@ export function ProfilePage({ onBack }: Props) {
   // NEW: Firebase Sign Out while maintaining Local Storage
   const handleSignOut = async () => {
     try {
+      // 1. Sign out of Firebase if configured
       const auth = await getFirebaseAuth();
       if (auth) {
         const { signOut: fbSignOut } = await import("firebase/auth");
@@ -141,8 +144,22 @@ export function ProfilePage({ onBack }: Props) {
     } catch (err) {
       console.error("Sign out error", err);
     }
-    // Inform store to lock the screen, but it will keep offline data cached!
+
+    // 2. Clear the Auth state (Removes session token)
     useAuthStore.getState().signOut();
+
+    // 3. Clear the User state (Prevents app/page.tsx from auto-logging back in)
+    // Note: Depending on your exact store setup, pass null or undefined
+    useUserStore.getState().setCurrentUser(null as any);
+    useUserStore.getState().setKeys(null as any);
+
+    // 4. Reset the permission gate
+    sessionStorage.removeItem("perms-done");
+
+    // 5. Force a hard reload to the root.
+    // This is CRITICAL for WebRTC apps to securely destroy all 
+    // active simple-peer connections and wipe the browser's memory cache.
+    window.location.href = "/";
   };
 
   return (

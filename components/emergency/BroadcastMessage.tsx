@@ -2,11 +2,11 @@
 /**
  * BroadcastMessage — special visual style for broadcast/SOS messages.
  */
-import { Message } from "@/store/chatStore";
+import { LocalMessage } from "@/store/chatStore";
 import { formatTime } from "@/lib/utils/helpers";
 import { ShieldAlert } from "lucide-react";
 
-export function BroadcastMessage({ msg }: { msg: Message }) {
+export function BroadcastMessage({ msg }: { msg: LocalMessage }) {
   return (
     <div className="flex justify-center my-2 px-4">
       <div className="flex items-start gap-2 max-w-[90%] bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3">

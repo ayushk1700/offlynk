@@ -1,92 +1,80 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Props {
-  /** Name of the peer who is typing */
   peerName?: string;
-  /** Live partial text being typed (ambient typing) */
   liveText?: string;
 }
 
-/**
- * TypingIndicator
- *
- * Two modes:
- *  - Classic (no liveText): animated three-dot bounce bubble.
- *  - Ambient (liveText present): shows the text being typed with a
- *    blinking cursor, giving a "ghost preview" effect.
- */
 export default function TypingIndicator({ peerName, liveText }: Props) {
-  const hasLive = liveText && liveText.trim().length > 0;
+  const hasLive = !!liveText?.trim();
 
   return (
-    <div className="flex items-end gap-2 px-4 py-1.5">
-      {/* Avatar placeholder dot */}
-      <div className="w-6 h-6 rounded-full bg-muted border border-border/60 flex items-center justify-center shrink-0 mb-1">
-        <span className="text-[9px] font-bold text-muted-foreground">
-          {peerName ? peerName.charAt(0).toUpperCase() : "?"}
-        </span>
-      </div>
-
-      <div className="max-w-[75%]">
-        {/* Peer name label */}
+    <div className="flex items-end gap-2 px-3 py-1.5">
+      <div className="max-w-[68%] flex flex-col items-start gap-1">
         {peerName && (
-          <p className="text-[10px] text-muted-foreground mb-1 ml-1">{peerName}</p>
+          <span className="text-[11px] text-muted-foreground ml-1 tracking-wide">
+            {peerName}
+          </span>
         )}
 
-        <motion.div
-          layout
-          className={`bg-card border border-border/80 rounded-2xl rounded-bl-sm overflow-hidden ${
-            hasLive ? "px-3.5 py-2.5" : "px-4 py-3"
-          }`}
-        >
-          <AnimatePresence mode="wait">
-            {hasLive ? (
-              /* ── Ambient text mode ── */
-              <motion.div
-                key="live"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex items-baseline gap-0"
-              >
-                <p className="text-sm text-foreground/80 leading-snug break-words whitespace-pre-wrap">
-                  {liveText}
-                </p>
-                {/* Blinking cursor */}
+        <AnimatePresence mode="wait">
+          {hasLive ? (
+            /* ── Ambient / ghost outline ── */
+            <motion.div
+              key="ghost"
+              initial={{ opacity: 0, y: 4, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 4, scale: 0.95 }}
+              transition={{ duration: 0.18 }}
+              className="flex items-baseline px-3.5 py-2
+                         rounded-[20px] rounded-bl-[5px]
+                         border border-dashed border-border
+                         text-[14px] leading-snug text-muted-foreground
+                         break-words"
+            >
+              {liveText}
+              <motion.span
+                className="inline-block align-bottom w-[1.5px] h-[1em]
+                           bg-muted-foreground rounded-sm ml-0.5"
+                animate={{ opacity: [1, 0, 1] }}
+                transition={{ duration: 0.85, repeat: Infinity }}
+              />
+            </motion.div>
+          ) : (
+            /* ── Classic outline dot bubble ── */
+            <motion.div
+              key="dots"
+              initial={{ opacity: 0, y: 6, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.9 }}
+              transition={{ duration: 0.22, ease: [0.34, 1.5, 0.64, 1] }}
+              className="flex items-center gap-[5px] px-4 py-3
+                         rounded-[20px] rounded-bl-[5px]
+                         border border-border
+                         bg-transparent"
+            >
+              {[0, 1, 2].map((i) => (
                 <motion.span
-                  className="inline-block w-[2px] h-[1em] bg-primary/70 ml-px rounded-full"
-                  animate={{ opacity: [1, 0, 1] }}
-                  transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
+                  key={i}
+                  className="w-[6px] h-[6px] rounded-full bg-muted-foreground"
+                  animate={{
+                    y: [0, -4, 0],
+                    opacity: [0.3, 1, 0.3],
+                  }}
+                  transition={{
+                    duration: 1.1,
+                    repeat: Infinity,
+                    delay: i * 0.2,
+                    ease: "easeInOut",
+                  }}
                 />
-              </motion.div>
-            ) : (
-              /* ── Classic three-dot bounce mode ── */
-              <motion.div
-                key="dots"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex gap-1 items-center"
-              >
-                {[0, 1, 2].map((i) => (
-                  <motion.span
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-muted-foreground"
-                    animate={{ y: [0, -4, 0] }}
-                    transition={{
-                      duration: 0.6,
-                      repeat: Infinity,
-                      delay: i * 0.15,
-                      ease: "easeInOut",
-                    }}
-                  />
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

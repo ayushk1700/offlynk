@@ -16,6 +16,8 @@ import {
   broadcastPong,
   BCEnvelope,
 } from "@/lib/webrtc/broadcastChannel";
+import { serializeMessage } from "@/lib/webrtc/dataChannel";
+import { peersInstance } from "./PeerDiscovery";
 
 // expose for MessageBubble re-export only
 export { broadcastReadAck } from "@/lib/webrtc/broadcastChannel";
@@ -58,6 +60,8 @@ export function LocalChatProvider({ children }: { children: React.ReactNode }) {
             publicKey: user.publicKey ?? "",
             isOnline: true,
             unreadCount: 0,
+            lastSeen: Date.now(),
+            updatedAt: Date.now(),
           });
           updatePeerStatus(user.id, true);
           // Reply with a pong so the newcomer knows we exist
@@ -94,6 +98,9 @@ export function LocalChatProvider({ children }: { children: React.ReactNode }) {
               timestamp: timestamp as number,
               status: "delivered",
               type: "text",
+              isDeleted: false,
+              isEdited: false,
+              updatedAt: Date.now(),
             });
           }
           break;
@@ -121,6 +128,31 @@ export function LocalChatProvider({ children }: { children: React.ReactNode }) {
 
     // Heartbeat: ping every 8 s, clean up dead peers every 10 s
     const pingInterval = setInterval(() => broadcastPing(currentUser), 8_000);
+    
+    // Mesh Presence (Phase 3): Share routing table every 15s
+    const meshInterval = setInterval(() => {
+      const { peers } = useChatStore.getState();
+      const nodes = Object.values(peers)
+        .filter(p => p.isOnline && p.id !== 'broadcast')
+        .map(p => ({ id: p.id, name: p.name, hops: p.hops || 1 }));
+      
+      if (nodes.length === 0) return;
+
+      const packet = serializeMessage({
+        type: 'mesh-map',
+        id: crypto.randomUUID(),
+        senderId: currentUser.id,
+        timestamp: Date.now(),
+        nodes
+      });
+
+      Object.values(peersInstance).forEach(peer => {
+        if (peer.connected) {
+          try { peer.send(packet); } catch(e) {}
+        }
+      });
+    }, 15_000);
+
     const cleanInterval = setInterval(() => {
       const now = Date.now();
       for (const [id, ts] of Object.entries(lastSeenRef.current)) {
@@ -137,6 +169,7 @@ export function LocalChatProvider({ children }: { children: React.ReactNode }) {
     cleanupRef.current = () => {
       ch.removeEventListener("message", handleMessage);
       clearInterval(pingInterval);
+      clearInterval(meshInterval);
       clearInterval(cleanInterval);
       window.removeEventListener("beforeunload", handleUnload);
       broadcastLeave(currentUser.id);

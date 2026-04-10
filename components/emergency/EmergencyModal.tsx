@@ -43,7 +43,7 @@ export function EmergencyModal({ open, onClose }: Props) {
     };
 
     // Local store
-    addMessage({ ...msg, status: "sent", type: "text" });
+    addMessage({ ...msg, status: "sent", type: "text", isDeleted: false, isEdited: false });
 
     // BroadcastChannel (same-origin tabs)
     sendLocalMessage(msg);

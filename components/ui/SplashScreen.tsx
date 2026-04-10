@@ -2,26 +2,25 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, ShieldCheck, Wifi, Sparkles } from "lucide-react";
+import { Lock, ShieldCheck, Wifi, Sparkles, Star } from "lucide-react";
 import { cn } from "@/lib/utils/helpers";
 
 const LOADING_MESSAGES = [
-    "Initializing cryptographic engine...",
-    "Scanning for local mesh peers...",
-    "Establishing secure tunnels...",
-    "Synchronizing offline storage...",
-    "Ready."
+    "Establishing secure orbits...",
+    "Discovering local constellations...",
+    "Syncing encrypted matter...",
+    "Ready for launch"
 ];
 
 interface SplashScreenProps {
     onComplete?: () => void;
-    duration?: number; // Total time before onComplete fires (if provided)
+    duration?: number;
 }
 
-export function SplashScreen({ onComplete, duration = 3500 }: SplashScreenProps) {
+export function SplashScreen({ onComplete, duration = 4000 }: SplashScreenProps) {
     const [messageIndex, setMessageIndex] = useState(0);
 
-    // Cycle through the loading messages
+    // Cycle through the loading messages smoothly
     useEffect(() => {
         const messageInterval = duration / (LOADING_MESSAGES.length - 1);
 
@@ -38,7 +37,7 @@ export function SplashScreen({ onComplete, duration = 3500 }: SplashScreenProps)
         // Trigger completion callback
         const completeTimer = setTimeout(() => {
             onComplete?.();
-        }, duration + 500); // Add a small buffer for the final text to be read
+        }, duration + 600);
 
         return () => {
             clearInterval(timer);
@@ -49,105 +48,137 @@ export function SplashScreen({ onComplete, duration = 3500 }: SplashScreenProps)
     return (
         <motion.div
             initial={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 1.05, filter: "blur(10px)" }}
-            transition={{ duration: 0.6, ease: "easeInOut" }}
-            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background paper-texture overflow-hidden"
+            exit={{ opacity: 0, filter: "blur(20px)", scale: 1.1 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#050505] overflow-hidden"
         >
-            {/* ── Ambient Background Glows ── */}
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                <motion.div
-                    animate={{
-                        scale: [1, 1.2, 1],
-                        opacity: [0.1, 0.2, 0.1]
-                    }}
-                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute w-[40rem] h-[40rem] bg-primary/10 rounded-full blur-[100px]"
-                />
-            </div>
-
-            {/* ── Core Visual: The Mesh Node ── */}
-            <div className="relative flex items-center justify-center w-64 h-64 mb-12">
-
-                {/* Pulsing Radar Rings */}
-                {[1, 2, 3].map((ring) => (
+            {/* ── Deep Space Background ── */}
+            <div className="absolute inset-0 pointer-events-none">
+                {/* Randomly placed twinkling stars */}
+                {[...Array(30)].map((_, i) => (
                     <motion.div
-                        key={`ring-${ring}`}
-                        className="absolute border border-primary/20 rounded-full"
-                        style={{ width: `${ring * 100}%`, height: `${ring * 100}%` }}
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1, opacity: [0, 0.5, 0] }}
+                        key={`star-${i}`}
+                        className="absolute bg-white rounded-full"
+                        style={{
+                            width: Math.random() * 2 + 1 + "px",
+                            height: Math.random() * 2 + 1 + "px",
+                            top: Math.random() * 100 + "%",
+                            left: Math.random() * 100 + "%",
+                        }}
+                        animate={{
+                            opacity: [0.1, Math.random() * 0.8 + 0.2, 0.1],
+                            scale: [1, 1.5, 1],
+                        }}
                         transition={{
-                            duration: 2.5,
+                            duration: Math.random() * 3 + 2,
                             repeat: Infinity,
-                            delay: ring * 0.4,
-                            ease: "easeOut",
+                            ease: "easeInOut",
+                            delay: Math.random() * 2,
                         }}
                     />
                 ))}
+            </div>
 
-                {/* Orbiting "Peers" */}
+            {/* ── Nebula Glows ── */}
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                 <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                    className="absolute w-48 h-48 rounded-full border border-dashed border-primary/20"
-                >
-                    <motion.div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-primary/40 rounded-full shadow-[0_0_15px_hsl(var(--primary))]" />
-                    <motion.div className="absolute -bottom-1.5 left-1/4 w-3 h-3 bg-primary/60 rounded-full shadow-[0_0_10px_hsl(var(--primary))]" />
-                    <motion.div className="absolute top-1/2 -right-2 w-5 h-5 bg-primary/30 rounded-full shadow-[0_0_20px_hsl(var(--primary))]" />
-                </motion.div>
-
-                {/* Central Logo Box */}
+                    animate={{ rotate: 360, scale: [1, 1.2, 1] }}
+                    transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                    className="absolute w-[30rem] h-[30rem] bg-indigo-600/10 rounded-full blur-[100px]"
+                />
                 <motion.div
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                    className="relative z-10 w-24 h-24 bg-primary rounded-[2rem] flex items-center justify-center shadow-2xl shadow-primary/30"
-                >
-                    <Lock className="w-10 h-10 text-primary-foreground" />
+                    animate={{ rotate: -360, scale: [1, 1.3, 1] }}
+                    transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+                    className="absolute w-[25rem] h-[25rem] bg-primary/10 rounded-full blur-[80px]"
+                />
+            </div>
 
-                    {/* Sparkle attachment */}
+            {/* ── Core Visual: The Constellation ── */}
+            <div className="relative flex items-center justify-center w-80 h-80 mb-6">
+
+                {/* Orbital Rings */}
+                {[0, 1, 2].map((ring) => (
                     <motion.div
-                        className="absolute -top-2 -right-2 w-8 h-8 bg-card border border-border rounded-full flex items-center justify-center shadow-sm"
-                        animate={{ scale: [1, 1.2, 1], rotate: [0, 15, -15, 0] }}
-                        transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                        key={`orbit-${ring}`}
+                        className="absolute rounded-full border border-primary/20"
+                        style={{
+                            width: `${(ring + 1) * 30}%`,
+                            height: `${(ring + 1) * 30}%`,
+                        }}
+                        animate={{ rotate: ring % 2 === 0 ? 360 : -360 }}
+                        transition={{
+                            duration: 10 + ring * 5,
+                            repeat: Infinity,
+                            ease: "linear",
+                        }}
                     >
-                        <Sparkles className="w-4 h-4 text-primary/80" />
+                        {/* Planets/Nodes on the orbit */}
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-primary/80 rounded-full shadow-[0_0_10px_hsl(var(--primary))]" />
+                        {ring === 2 && (
+                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-3 h-3 bg-indigo-400/80 rounded-full shadow-[0_0_15px_#818cf8]" />
+                        )}
+                    </motion.div>
+                ))}
+
+                {/* Central Star Core */}
+                <motion.div
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 1, ease: "easeOut", type: "spring", bounce: 0.4 }}
+                    className="relative z-10 w-20 h-20 rounded-full bg-black border border-primary/30 flex items-center justify-center shadow-[0_0_40px_hsl(var(--primary)/0.4)]"
+                >
+                    {/* Inner glowing core */}
+                    <motion.div
+                        animate={{ scale: [1, 1.1, 1], opacity: [0.7, 1, 0.7] }}
+                        transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                        className="absolute inset-0 rounded-full bg-primary/20 blur-md"
+                    />
+
+                    <Lock className="w-8 h-8 text-primary relative z-10" />
+
+                    {/* Core Sparkle */}
+                    <motion.div
+                        className="absolute -top-1 -right-1 z-20 text-indigo-300"
+                        animate={{ rotate: 360, scale: [1, 1.3, 1] }}
+                        transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                    >
+                        <Sparkles className="w-5 h-5 fill-indigo-300/20" />
                     </motion.div>
                 </motion.div>
             </div>
 
             {/* ── Brand Text ── */}
             <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4, duration: 0.6 }}
-                className="text-center z-10"
+                transition={{ delay: 0.5, duration: 0.7 }}
+                className="text-center z-10 flex flex-col items-center"
             >
-                <h1 className="text-4xl font-extrabold tracking-tight mb-2 flex items-center justify-center gap-2">
-                    OffLynk
+                <h1 className="text-4xl font-extrabold tracking-widest text-white mb-3 flex items-center gap-3 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                    OFFLYNK
                 </h1>
 
-                <div className="flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground/80 mb-8">
-                    <ShieldCheck className="w-4 h-4" /> E2E Encrypted
-                    <span className="w-1 h-1 bg-border rounded-full mx-1" />
-                    <Wifi className="w-4 h-4" /> Decentralized
+                <div className="flex items-center justify-center gap-3 text-xs font-semibold tracking-wider text-white/50 uppercase">
+                    <ShieldCheck className="w-3.5 h-3.5" /> E2E Encrypted
+                    <span className="w-1 h-1 bg-white/20 rounded-full" />
+                    <Wifi className="w-3.5 h-3.5" /> Decentralized
                 </div>
             </motion.div>
 
             {/* ── Dynamic Status Text ── */}
-            <div className="h-6 relative w-full max-w-xs flex items-center justify-center z-10">
+            <div className="absolute bottom-16 h-6 w-full max-w-xs flex items-center justify-center z-10">
                 <AnimatePresence mode="wait">
                     <motion.p
                         key={messageIndex}
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -5 }}
-                        transition={{ duration: 0.3 }}
+                        initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
+                        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                        exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
+                        transition={{ duration: 0.4 }}
                         className={cn(
-                            "text-sm absolute text-center w-full",
+                            "text-xs absolute text-center w-full uppercase tracking-[0.2em] font-medium",
                             messageIndex === LOADING_MESSAGES.length - 1
-                                ? "text-primary font-semibold"
-                                : "text-muted-foreground font-mono text-xs uppercase tracking-widest"
+                                ? "text-primary drop-shadow-[0_0_8px_hsl(var(--primary))]"
+                                : "text-white/40"
                         )}
                     >
                         {LOADING_MESSAGES[messageIndex]}

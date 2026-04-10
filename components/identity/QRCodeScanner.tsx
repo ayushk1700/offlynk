@@ -17,7 +17,7 @@ export function QRCodeScanner() {
     try {
       const data = JSON.parse(raw.trim());
       if (!data.id || !data.name || !data.publicKey) throw new Error("Invalid");
-      addPeer({ id: data.id, name: data.name, publicKey: data.publicKey, isOnline: false, unreadCount: 0 });
+      addPeer({ id: data.id, name: data.name, publicKey: data.publicKey, isOnline: false, unreadCount: 0, lastSeen: Date.now(), updatedAt: Date.now() });
       setStatus("ok");
       setRaw("");
     } catch {

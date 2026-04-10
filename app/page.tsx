@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useUserStore } from "@/store/userStore";
 import { useAuthStore } from "@/store/authStore";
+import { useChatStore } from "@/store/chatStore";
 import { EmailAuth } from "@/components/auth/EmailAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import { PermissionGate } from "@/components/ui/PermissionGate";
@@ -15,6 +16,7 @@ type AppState = "evaluating" | "auth" | "permissions" | "app";
 export default function HomePage() {
   const { currentUser } = useUserStore();
   const { isAuthenticated, setAuth, setLoading } = useAuthStore();
+  const { initialize } = useChatStore();
 
   // App routing state
   const [appState, setAppState] = useState<AppState>("evaluating");
@@ -32,6 +34,9 @@ export default function HomePage() {
   // Determine app state (Auth -> Permissions -> App)
   useEffect(() => {
     const check = async () => {
+      // 1. Rehydrate Chat Database
+      await initialize();
+
       // If no local identity → go to auth
       if (!currentUser) {
         setAppState("auth");

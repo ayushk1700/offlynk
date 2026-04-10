@@ -4,33 +4,60 @@ import { useState, useRef, useEffect } from "react";
 import { useChatStore, useUserStore } from "@/store";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
-import { Send, ShieldAlert, X, Paperclip, Plus } from "lucide-react";
-import { generateId } from "@/lib/utils/helpers";
+import { Send, ShieldAlert, X, Paperclip, Plus, Eye, EyeOff } from "lucide-react";
+import { generateId, cn } from "@/lib/utils/helpers";
 import { peersInstance } from "@/components/connection/PeerDiscovery";
 import { sendLocalMessage, sendTypingSignal, sendAmbientTyping } from "@/lib/webrtc/broadcastChannel";
+import { serializeMessage } from "@/lib/webrtc/dataChannel";
+import { useSettingsStore } from "@/store/settingsStore";
 import { EmojiPicker } from "./EmojiPicker";
+import { Sparkles } from "lucide-react";
 
-// FIX: Removed VoicePlayer and changed import path to "./VoiceRecorder"
 import { VoiceMessageData, VoiceRecorder } from "./VoicePlayer";
 import { VideoRecorder, VideoMessageData } from "./VideoRecorder";
 import { CameraCapture } from "./CameraCapture";
 import { FileUpload } from "@/components/file/FileUpload";
 import { sendFile } from "@/lib/webrtc/fileTransfer";
 import { outgoingTransfers } from "@/components/file/FileTransferProgress";
+import type { LocalMessage } from "@/store/chatStore";
+
+const MOCK_TRANSCRIPTS = [
+  "Hello, are you there? I'm coming over now.",
+  "Check the file I just sent you, it's really important.",
+  "OffLynk is working great even without the internet!",
+  "Can you hear me? This is a test of the 2026 voice transcript system."
+];
 
 export default function MessageInput() {
   const [text, setText] = useState("");
   const [showFileUpload, setShowFileUpload] = useState(false);
-  const { activeChatId, addMessage, peers } = useChatStore();
+  const [isViewOnce, setIsViewOnce] = useState(false);
+  
+  const { activeChatId, addMessage, addTranscript, updateMessage, peers, setDraft } = useChatStore();
   const { currentUser } = useUserStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Load existing draft only when chat ID changes
+  const prevChatId = useRef(activeChatId);
   useEffect(() => {
-    textareaRef.current?.focus();
-    setShowFileUpload(false);
-    setText("");
-  }, [activeChatId]);
+    if (activeChatId !== prevChatId.current) {
+        setText(activeChatId ? (peers[activeChatId]?.draft || "") : "");
+        prevChatId.current = activeChatId;
+        textareaRef.current?.focus();
+        setShowFileUpload(false);
+        setIsViewOnce(false);
+    }
+  }, [activeChatId, peers]);
+
+  // Auto-save draft (Debounced)
+  useEffect(() => {
+     if (!activeChatId) return;
+     const t = setTimeout(() => {
+       setDraft(activeChatId, text);
+     }, 1000);
+     return () => clearTimeout(t);
+  }, [text, activeChatId, setDraft]);
 
   /* ── Send text ─────────────────────────────────────────── */
   const handleSend = async (e?: React.FormEvent) => {
@@ -40,21 +67,89 @@ export default function MessageInput() {
     const id = generateId();
     const ts = Date.now();
     const content = text.trim();
-    const msgData = { id, senderId: currentUser.id, receiverId: activeChatId, content, timestamp: ts, type: "text" as const };
 
-    addMessage({ ...msgData, status: "sending", did: `did:offgrid:${currentUser.id}` });
+    const msgData: LocalMessage = { 
+        id, 
+        senderId: currentUser.id, 
+        receiverId: activeChatId, 
+        content, 
+        timestamp: ts, 
+        type: "text", 
+        status: "sending",
+        isDeleted: false,
+        isEdited: false
+    };
+
+    addMessage(activeChatId, msgData);
     setText("");
+    setDraft(activeChatId, "");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    // Send via BroadcastChannel (tabs) + WebRTC (remote)
+    // Prepare packet
+    const chatPacket = serializeMessage({ 
+      type: "message", 
+      id, 
+      senderId: currentUser.id, 
+      timestamp: ts, 
+      content 
+    });
+
+    // Send via BroadcastChannel (local tabs)
     sendLocalMessage({ id, senderId: currentUser.id, senderName: currentUser.name, receiverId: activeChatId, content, timestamp: ts });
-    const rtcPeer = peersInstance[activeChatId];
-    if (rtcPeer) { try { rtcPeer.send(JSON.stringify({ ...msgData, type: "message" })); } catch (err) { console.error("RTC send error:", err); } }
-    else if (activeChatId === "broadcast") {
-      Object.values(peersInstance).forEach((p) => { try { p.send(JSON.stringify({ ...msgData, type: "message" })); } catch (err) { console.error("RTC send error:", err); } });
+
+    // Send via WebRTC (remote peers)
+    const targetPeer = peers[activeChatId];
+    
+    if (activeChatId === 'broadcast') {
+      // 🚨 Broadcast to EVERYONE connected
+      Object.values(peersInstance).forEach(peer => {
+        if (peer.connected) {
+          try { peer.send(chatPacket); } catch(e) {}
+        }
+      });
+    } else if (targetPeer?.type === 'group' && targetPeer.participants) {
+      // 👥 Send to all group members
+      targetPeer.participants.forEach(pid => {
+        if (pid === currentUser.id) return;
+        const rtcPeer = peersInstance[pid];
+        if (rtcPeer?.connected) {
+           try { rtcPeer.send(chatPacket); } catch(e) {}
+        }
+      });
+    } else {
+      // 👤 Private message
+      const rtcPeer = peersInstance[activeChatId];
+      if (rtcPeer?.connected) { 
+        try { rtcPeer.send(chatPacket); } catch (err) { console.error("RTC send error:", err); } 
+      } else {
+        // 🛰️ Try Relay Mesh
+        const relayMsg = {
+          type: 'relay' as const,
+          id: crypto.randomUUID(),
+          senderId: currentUser.id,
+          timestamp: ts,
+          targetId: activeChatId,
+          hopCount: 1,
+          visited: [currentUser.id],
+          payload: { 
+            type: 'message' as const, 
+            id, 
+            senderId: currentUser.id, 
+            timestamp: ts, 
+            content 
+          }
+        };
+        
+        const relayPacket = serializeMessage(relayMsg);
+        Object.values(peersInstance).forEach(peer => {
+           if (peer.connected) {
+             try { peer.send(relayPacket); } catch(e) {}
+           }
+        });
+      }
     }
 
-    useChatStore.getState().updateMessageStatus(id, "sent");
+    updateMessage(activeChatId, id, { status: "sent" });
 
     // Clear ambient typing now that message is sent
     if (activeChatId && currentUser) sendAmbientTyping(currentUser.id, activeChatId, "");
@@ -66,14 +161,20 @@ export default function MessageInput() {
     const id = generateId();
     const ts = Date.now();
 
-    addMessage({
+    addMessage(activeChatId, {
       id, senderId: currentUser.id, receiverId: activeChatId, content: "🎙 Voice message",
       timestamp: ts, status: "sent", type: "voice",
+      isViewOnce, isDeleted: false, isEdited: false,
       fileData: { name: "voice.webm", mimeType: data.mimeType, blobUrl: data.blobUrl, duration: data.duration },
-      did: `did:offlynk:${currentUser.id}`,
+    }).then(() => {
+        // Voice Transcript Mock Trigger
+        setTimeout(() => {
+            const randomTranscript = MOCK_TRANSCRIPTS[Math.floor(Math.random() * MOCK_TRANSCRIPTS.length)];
+            addTranscript(activeChatId, id, randomTranscript);
+        }, 1500);
     });
 
-    useChatStore.getState().updateMessageStatus(id, "sent");
+    setIsViewOnce(false);
   };
 
   /* ── Send video ────────────────────────────────────────── */
@@ -82,14 +183,14 @@ export default function MessageInput() {
     const id = generateId();
     const ts = Date.now();
 
-    addMessage({
+    addMessage(activeChatId, {
       id, senderId: currentUser.id, receiverId: activeChatId, content: "🎥 Video message",
       timestamp: ts, status: "sent", type: "file",
+      isViewOnce, isDeleted: false, isEdited: false,
       fileData: { name: "video.webm", mimeType: data.mimeType, blobUrl: data.blobUrl, duration: data.duration, size: data.size },
-      did: `did:offlynk:${currentUser.id}`,
     });
 
-    useChatStore.getState().updateMessageStatus(id, "sent");
+    setIsViewOnce(false);
   };
 
   /* ── Send camera photo ─────────────────────────────────── */
@@ -105,11 +206,11 @@ export default function MessageInput() {
       dataUrl: dataUrl
     };
 
-    addMessage({
+    addMessage(activeChatId, {
       id, senderId: currentUser.id, receiverId: activeChatId, content: "📷 Photo",
       timestamp: ts, status: "sending", type: "image",
+      isViewOnce, isDeleted: false, isEdited: false,
       fileData: newFileData,
-      did: `did:offlynk:${currentUser.id}`,
     });
 
     // Send encrypted over WebRTC
@@ -117,18 +218,19 @@ export default function MessageInput() {
     if (peer) {
       const transferId = generateId();
       const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
-      outgoingTransfers.set(transferId, { name: "photo.jpg", size: blob.size, progress: 0 });
+      outgoingTransfers.set(transferId, { name: "photo.jpg", size: blob.size, progress: 0, mimeType: "image/jpeg", previewUrl: dataUrl });
       sendFile(file, transferId, currentUser.id, (data) => {
         try { peer.send(data); } catch (err) { console.error("RTC send error:", err); }
       }, (pct) => {
-        outgoingTransfers.set(transferId, { name: "photo.jpg", size: blob.size, progress: pct });
+        outgoingTransfers.set(transferId, { name: "photo.jpg", size: blob.size, progress: pct, mimeType: "image/jpeg", previewUrl: dataUrl });
       }).then(() => {
         outgoingTransfers.delete(transferId);
-        useChatStore.getState().updateMessageStatus(id, "delivered");
+        updateMessage(activeChatId, id, { status: "delivered" });
       });
     } else {
-      useChatStore.getState().updateMessageStatus(id, "sent");
+      updateMessage(activeChatId, id, { status: "sent" });
     }
+    setIsViewOnce(false);
   };
 
   /* ── Keyboard ──────────────────────────────────────────── */
@@ -136,22 +238,90 @@ export default function MessageInput() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
+  const typingThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingClearRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleKeyInput = () => {
+    if (!activeChatId || !currentUser) return;
+    const rtcPeer = peersInstance[activeChatId];
+    if (!rtcPeer || !rtcPeer.connected) return;
+
+    if (!typingThrottleRef.current) {
+        rtcPeer.send(serializeMessage({
+          id: crypto.randomUUID(),
+          type: 'typing',
+          senderId: currentUser.id,
+          timestamp: Date.now(),
+          isTyping: true,
+        }));
+        typingThrottleRef.current = setTimeout(() => {
+          typingThrottleRef.current = null;
+        }, 3000);
+    }
+
+    // Reset the "stopped typing" clear timer on every keystroke
+    if (typingClearRef.current) clearTimeout(typingClearRef.current);
+    typingClearRef.current = setTimeout(() => {
+        rtcPeer.send(serializeMessage({
+          id: crypto.randomUUID(),
+          type: 'typing',
+          senderId: currentUser.id,
+          timestamp: Date.now(),
+          isTyping: false,
+        }));
+    }, 4000);
+  };
+
+  const settings = useSettingsStore();
+
+  const handleToggleAmbient = () => {
+     if (!activeChatId) return;
+     settings.toggleAmbientTyping(activeChatId);
+     const newState = !settings.ambientTypingEnabled[activeChatId];
+     if (currentUser) {
+        // Send internal system announcement text message
+        const id = crypto.randomUUID();
+        const content = newState ? "✨ Enabled ambient typing. You see what I type live!" : "🚫 Disabled ambient typing.";
+        addMessage(activeChatId, {
+            id, senderId: currentUser.id, receiverId: activeChatId, content,
+            timestamp: Date.now(), status: "sent", type: "text",
+            isDeleted: false, isEdited: false
+        });
+
+        // Broadcast to peer
+        const rtcPeer = peersInstance[activeChatId];
+        if (rtcPeer?.connected) {
+            rtcPeer.send(serializeMessage({ 
+                type: "message", id, senderId: currentUser.id, timestamp: Date.now(), 
+                content
+            }));
+        }
+     }
+  };
+
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
+    const val = e.target.value;
+    setText(val);
     e.target.style.height = "auto";
     e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px";
 
-    const { privacyTyping } = useAuthStore.getState();
+    const isAmbient = activeChatId ? settings.ambientTypingEnabled[activeChatId] : false;
 
-    if (activeChatId && currentUser && privacyTyping) {
-      sendTypingSignal(currentUser.id, activeChatId);
-      sendAmbientTyping(currentUser.id, activeChatId, e.target.value);
+    if (activeChatId && currentUser) {
+      if (isAmbient) {
+          sendAmbientTyping(currentUser.id, activeChatId, val);
+          const rtcPeer = peersInstance[activeChatId];
+          if (rtcPeer?.connected && val.length > 0) {
+              rtcPeer.send(serializeMessage({
+                id: crypto.randomUUID(), type: 'chat-action', senderId: currentUser.id,
+                timestamp: Date.now(), action: 'report', targetId: activeChatId,
+                reason: `live:${val}`
+              }));
+          }
+      } else {
+          handleKeyInput();
+      }
     }
-
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    typingTimerRef.current = setTimeout(() => {
-      if (activeChatId && currentUser) sendAmbientTyping(currentUser.id, activeChatId, "");
-    }, 4000);
   };
 
   const insertEmoji = (emoji: string) => {
@@ -172,10 +342,21 @@ export default function MessageInput() {
 
   return (
     <div className="shrink-0 border-t border-border bg-card/80 backdrop-blur-xl relative pb-[env(safe-area-inset-bottom,0px)]">
+      {/* View Once Indicator */}
+      {isViewOnce && (
+        <div className="bg-primary/5 py-1 px-4 flex items-center gap-2 border-b border-primary/10 animate-in slide-in-from-bottom-1">
+            <EyeOff className="w-3 h-3 text-primary animate-pulse" />
+            <span className="text-[10px] font-bold text-primary uppercase tracking-wider">View Once Mode Active</span>
+            <button onClick={() => setIsViewOnce(false)} className="ml-auto text-primary hover:bg-primary/10 rounded-full p-0.5">
+                <X className="w-3 h-3" />
+            </button>
+        </div>
+      )}
+
       {/* File upload panel */}
       {showFileUpload && (
         <div className="border-b border-border/50 bg-card overflow-hidden">
-          <FileUpload onClose={() => setShowFileUpload(false)} />
+          <FileUpload isViewOnce={isViewOnce} setIsViewOnce={setIsViewOnce} onClose={() => setShowFileUpload(false)} />
         </div>
       )}
 
@@ -212,12 +393,18 @@ export default function MessageInput() {
             style={{ height: "auto" }}
           />
 
-          {/* Camera (Inside Right, only if empty) */}
-          {!hasText && !isBroadcast && (
-            <div className="shrink-0 mb-0.5 mr-1 overflow-hidden">
-               <CameraCapture onCapture={handleCameraCapture} />
-            </div>
-          )}
+          {/* Sparkles (Live Typing Toggle) */}
+          <button 
+            type="button" 
+            onClick={handleToggleAmbient}
+            className={cn(
+               "shrink-0 mb-0.5 mr-1 p-1.5 rounded-full transition-colors",
+               (activeChatId && settings.ambientTypingEnabled[activeChatId]) ? "text-primary bg-primary/10" : "text-muted-foreground hover:bg-muted/50"
+            )}
+            title="Toggle Live Typing"
+          >
+             <Sparkles className={cn("w-4 h-4", (activeChatId && settings.ambientTypingEnabled[activeChatId]) && "animate-pulse")} />
+          </button>
         </div>
 
         {/* RIGHT: Voice/Video circles OR Send Circle */}

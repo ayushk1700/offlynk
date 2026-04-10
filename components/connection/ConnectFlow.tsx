@@ -118,6 +118,7 @@ export function ConnectFlow() {
             id: parsed.id, senderId: parsed.senderId,
             receiverId: currentUser?.id || "", content: parsed.content,
             timestamp: parsed.timestamp, status: "delivered", type: "text",
+            isDeleted: false, isEdited: false,
           });
         }
       } catch (err) { console.warn("Could not process payload:", err); }

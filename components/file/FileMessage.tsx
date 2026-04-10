@@ -2,13 +2,13 @@
 /**
  * FileMessage — a message bubble specifically for file attachments (Images, Videos, Voice, Docs).
  */
-import { Message } from "@/store/chatStore";
+import { LocalMessage } from "@/store/chatStore";
 import { FilePreview } from "./FilePreview";
 import { formatTime, cn } from "@/lib/utils/helpers";
 import { ShieldCheck, Mic, Film } from "lucide-react";
 
 interface Props {
-  msg: Message;
+  msg: LocalMessage;
   isMe: boolean;
 }
 
